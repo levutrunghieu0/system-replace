@@ -43,7 +43,7 @@ export const Route = createFileRoute('/front')({
   component: FrontPage,
 })
 
-type FrontMode = 'idle' | 'sale-empty' | 'sale-cart' | 'payment' | 'register-blank' | 'register-count' | 'register-confirmed'
+type FrontMode = 'sale-empty' | 'sale-cart' | 'payment' | 'register-count' | 'register-confirmed'
 type DialogMode = 'cardSelect' | 'cardAmount' | 'paymentComplete' | 'installment' | 'cardProcessing' | 'barcodeAmount' | 'barcodeScan' | null
 type PayMethod = 'credit' | 'barcode' | 'emoney' | 'cash'
 
@@ -87,7 +87,7 @@ const formatYen = (value: number) => `¥${value.toLocaleString()}`
 
 function FrontPage() {
   const { t } = useTranslation()
-  const [mode, setMode] = useState<FrontMode>('idle')
+  const [mode, setMode] = useState<FrontMode>('sale-empty')
   const [dialog, setDialog] = useState<DialogMode>(null)
   const [selectedCoupon, setSelectedCoupon] = useState('couponA')
   const [showReceipt, setShowReceipt] = useState(false)
@@ -104,7 +104,7 @@ function FrontPage() {
     })
   }
   const resetFlow = () => {
-    setMode('idle')
+    setMode('sale-empty')
     setDialog(null)
     setPayments(emptyPayments)
     setRegisterCounts(denominations.map((_, index) => index === 0 ? 10 : 0))
@@ -120,7 +120,6 @@ function FrontPage() {
 
   const actions = (() => {
     const stop = { key: 'stop', labelKey: 'page.front.action.stopWork', variant: 'outlined' as const, position: 'left' as const, onClick: resetFlow }
-    if (mode === 'idle') return [{ ...stop, disabled: true }]
     if (mode === 'sale-empty') {
       return [
         stop,
@@ -150,14 +149,7 @@ function FrontPage() {
         { ...stop, onClick: () => setMode('sale-cart') },
         { key: 'sample-a', labelKey: 'page.front.sample', variant: 'outlined' as const, position: 'left' as const, onClick: () => { completePayment('emoney'); setDialog('paymentComplete') } },
         { key: 'sample-b', labelKey: 'page.front.sample', variant: 'outlined' as const, position: 'left' as const, onClick: () => setDialog('installment') },
-        { key: 'finish', labelKey: 'page.front.action.finish', variant: 'contained' as const, position: 'right' as const, disabled: paymentBalance > 0, onClick: () => setMode('register-blank') },
-      ]
-    }
-    if (mode === 'register-blank') {
-      return [
-        { ...stop, onClick: () => setMode('payment') },
-        { key: 'prev-register', labelKey: 'page.front.action.prevRegisterAmount', variant: 'outlined' as const, position: 'left' as const, disabled: true, onClick: () => undefined },
-        { key: 'run', labelKey: 'page.front.action.execute', variant: 'contained' as const, position: 'right' as const, disabled: true, onClick: () => undefined },
+        { key: 'finish', labelKey: 'page.front.action.finish', variant: 'contained' as const, position: 'right' as const, disabled: paymentBalance > 0, onClick: () => setMode('register-count') },
       ]
     }
     return [
@@ -169,28 +161,22 @@ function FrontPage() {
 
   useLayoutConfig({
     title,
-    showBackButton: mode !== 'idle',
+    showBackButton: mode !== 'sale-empty',
     hideSecondaryNav: true,
     actions,
-    onBack: () => setMode(mode === 'payment' ? 'sale-cart' : mode.startsWith('register') ? 'payment' : 'idle'),
+    onBack: () => setMode(mode === 'payment' ? 'sale-cart' : mode.startsWith('register') ? 'payment' : 'sale-empty'),
   })
 
   return (
     <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-      {mode === 'idle' && <BlankStage onStart={() => setMode('sale-empty')} />}
       {mode === 'sale-empty' && <SaleWorkspace empty onAdd={() => setMode('sale-cart')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
       {mode === 'sale-cart' && <SaleWorkspace onAdd={() => setMode('payment')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
       {mode === 'payment' && <PaymentWorkspace payments={payments} balance={paymentBalance} onOpenDialog={setDialog} onCashPayment={() => completePayment('cash')} onEMoneyPayment={() => { completePayment('emoney'); setDialog('paymentComplete') }} />}
-      {mode === 'register-blank' && <BlankStage onStart={() => setMode('register-count')} />}
       {(mode === 'register-count' || mode === 'register-confirmed') && <RegisterCount confirmed={mode === 'register-confirmed'} counts={registerCounts} onCountChange={(index, nextCount) => setRegisterCounts((currentCounts) => currentCounts.map((count, countIndex) => countIndex === index ? Math.max(nextCount, 0) : count))} />}
       <PaymentDialogs dialog={dialog} onClose={() => setDialog(null)} onDialog={setDialog} onCompletePayment={completePayment} />
-      <ReceiptOverlay open={showReceipt} onClose={() => { setShowReceipt(false); setMode('register-blank') }} />
+      <ReceiptOverlay open={showReceipt} onClose={() => { setShowReceipt(false); setMode('register-count') }} />
     </Box>
   )
-}
-
-function BlankStage({ onStart }: { onStart: () => void }) {
-  return <Paper onClick={onStart} variant="outlined" sx={{ flex: 1, minHeight: 0, cursor: 'pointer', bgcolor: 'white', borderColor: BORDER }} />
 }
 
 function SaleWorkspace({ empty = false, onAdd, selectedCoupon, onCouponChange }: { empty?: boolean; onAdd: () => void; selectedCoupon: string; onCouponChange: (coupon: string) => void }) {
