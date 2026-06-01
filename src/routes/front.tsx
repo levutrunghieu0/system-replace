@@ -72,14 +72,8 @@ const saleRows: SaleRow[] = [
   { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '10,000', unit: '¥0,800,000', amount: '¥10,000,000', tax: 'あああ' },
 ]
 const denominations = ['10,000円', '5,000円', '2,000円', '1,000円', '500円', '100円', '50円', '10円', '5円', '1円']
-const quickLanguages = [
-  { code: 'ja', label: '日本語' },
-  { code: 'en', label: 'English' },
-  { code: 'vi', label: 'Tiếng Việt' },
-]
-
 function FrontPage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const [mode, setMode] = useState<FrontMode>('idle')
   const [dialog, setDialog] = useState<DialogMode>(null)
   const [selectedCoupon, setSelectedCoupon] = useState('couponA')
@@ -152,7 +146,6 @@ function FrontPage() {
 
   return (
     <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <LanguageStrip currentLanguage={i18n.resolvedLanguage ?? i18n.language} onChange={(lng) => i18n.changeLanguage(lng)} />
       {mode === 'idle' && <BlankStage onStart={() => setMode('sale-empty')} />}
       {mode === 'sale-empty' && <SaleWorkspace empty onAdd={() => setMode('sale-cart')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
       {mode === 'sale-cart' && <SaleWorkspace onAdd={() => setMode('payment')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
@@ -161,27 +154,6 @@ function FrontPage() {
       {(mode === 'register-count' || mode === 'register-confirmed') && <RegisterCount confirmed={mode === 'register-confirmed'} />}
       <PaymentDialogs dialog={dialog} onClose={() => setDialog(null)} onDialog={setDialog} />
       <ReceiptOverlay open={showReceipt} onClose={() => { setShowReceipt(false); setMode('register-blank') }} />
-    </Box>
-  )
-}
-
-function LanguageStrip({ currentLanguage, onChange }: { currentLanguage: string; onChange: (language: string) => void }) {
-  const { t } = useTranslation()
-
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.75, minHeight: 28 }}>
-      <Typography variant="caption" color="text.secondary">{t('page.front.language')}</Typography>
-      {quickLanguages.map((language) => (
-        <Button
-          key={language.code}
-          variant={currentLanguage.startsWith(language.code) ? 'contained' : 'outlined'}
-          size="small"
-          onClick={() => onChange(language.code)}
-          sx={{ minWidth: 72, height: 26, fontSize: 11, textTransform: 'none' }}
-        >
-          {language.label}
-        </Button>
-      ))}
     </Box>
   )
 }

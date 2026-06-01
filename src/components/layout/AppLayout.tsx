@@ -62,6 +62,15 @@ function AppShell({ children }: AppLayoutProps) {
   }
 
   const handlePrimarySelect = (key: string) => {
+    const selectedPrimary = primaryMenuItems.find((item) => item.key === key)
+    const hasSecondaryMenu = Boolean(selectedPrimary?.subItems.length)
+
+    if (!hasSecondaryMenu) {
+      setActivePrimaryKey(null)
+      setNavOverride(false)
+      return
+    }
+
     if (activePrimaryKey === key) {
       setActivePrimaryKey(null)
       setNavOverride(false)
