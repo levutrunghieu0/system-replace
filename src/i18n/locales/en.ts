@@ -96,11 +96,25 @@ const en = {
     toggle: 'Toggle Language',
     ja: 'Japanese',
     en: 'English',
+    vi: 'Vietnamese',
   },
   settings: {
     title: 'Settings',
   },
   page: {
+    front: {
+      language: 'Language',
+      title: { front: 'Front', sales: 'Front (Sales)', payment: 'Front (Payment)', registerOpen: 'Open Register' },
+      action: { stopWork: 'Stop Work', prevDayReflect: 'Selected Print', ticketList: 'Slip List', receptionTicket: 'Reception Slip', receptionInfo: 'Reception Info', receiptFix: 'Receipt Fix', correction: 'Correction', checkout: 'Checkout', finish: 'Finish', execute: 'Run', createCase: 'Create Case', prevRegisterAmount: 'Apply previous cash reserve', prevCloseReflect: 'Apply previous close data', prevCloseRelease: 'Release previous close data' },
+      sample: 'Sample', sale: 'Sales', newest: 'Newest', longSample: 'Sample text sample text sample text',
+      empty: { search: 'Search', searchText: 'Search by request bar', scan: 'Scan', scanText: 'Slip / item barcode', list: 'Call List', listText: 'Sample template' },
+      table: { deal: 'Deal', code: 'Code', name: 'Item', attr: 'Class', qty: 'Qty', unit: 'Unit', amount: 'Amount', note: 'Note' },
+      breakdownDetail: 'Breakdown Detail', serialNo: 'Serial No.', qtyCount: 'Qty', subtotal: 'Subtotal', tax: 'Tax', productIn: 'Items', couponInfo: 'Coupon Info', couponA: 'Coupon A', couponB: 'Coupon B', couponC: 'Coupon C', couponD: 'Coupon D', discountTotal: 'Total Discount', couponDiscount: 'Coupon Discount', totalAmount: 'Total Amount',
+      depositType: 'Deposit Type', creditSettlement: 'Credit Payment', credit: 'Credit', cashlessSettlement: 'Cashless / Other Payment', barcodePay: 'Barcode Pay', eMoney: 'E-money', otherPay: 'Other Payment', cashSettlement: 'Cash Payment', amountInput: 'Enter amount', change: 'Change', billingInfo: 'Billing Info', discount: 'Discount', paymentBreakdown: 'Payment Breakdown', cash: 'Cash', pay: '○○Pay', balance: 'Balance',
+      cancel: 'Cancel', done: 'Done', confirm: 'Confirm', retry: 'Retry',
+      dialog: { cardTitle: 'Credit Card Payment', selectCard: 'Select a credit-card company', cardAmount: 'Credit-card payment amount', terminalComplete: 'Payment terminal completed', icWith: 'With IC chip', icWithout: 'Without IC chip', authCard: 'Authorization card', cancelDeal: 'Cancel transaction', terminalGuide: 'Follow the terminal instructions to continue.', installmentTitle: 'Installments', selectInstallment: 'Select the number of payments', cardProcessing: 'Processing credit-card payment', terminalInput: 'Please operate the payment terminal.', barcodeTitle: 'Smartphone Code Payment', barcodeAmount: 'Smartphone code payment amount', scanCustomerBarcode: 'Please scan the customer smartphone barcode' },
+      denomination: 'Denomination', count: 'Count', amount: 'Amount', adjustmentPlaceholder: 'Enter adjustment amount directly if needed', registerConfirmedNote: 'Register closing 02\nNumbers confirmed on the\nclosing screen are\nreflected here', prevCashReserve: 'Previous cash reserve reflected', cashDetail: 'Cash details', safeCash: 'Safe Cash', registerCash: 'Register Cash', cashReserve: 'Cash Reserve', cashDifference: 'Cash Difference', receiptTitle: 'Print pattern test  June 16 (Tue)', receiptBody: '・Output inventory details\n・Output category summary data\n・Please check the printed report\n\n\n\n\n\nPrinted with Front test receipt mock.',
+    },
     inventory: {
       gross: {
         title: 'Gross Inventory Registration',

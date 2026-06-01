@@ -96,11 +96,25 @@ const ja = {
     toggle: '言語切替',
     ja: '日本語',
     en: 'English',
+    vi: 'Tiếng Việt',
   },
   settings: {
     title: '設定',
   },
   page: {
+    front: {
+      language: '言語',
+      title: { front: 'フロント', sales: 'フロント(売上)', payment: 'フロント(会計)', registerOpen: '全体レジ開設' },
+      action: { stopWork: '作業を中止', prevDayReflect: '選択済み印刷', ticketList: '伝票一覧', receptionTicket: '受付票', receptionInfo: '受付情報', receiptFix: 'レシ補正', correction: '訂正', checkout: '会計', finish: '終了', execute: '実行', createCase: '案件作成', prevRegisterAmount: '前日までの釣銭準備金設定反映', prevCloseReflect: '前日閉店データ反映', prevCloseRelease: '前日閉店データ解除' },
+      sample: 'サンプル', sale: '販売', newest: '新しい順', longSample: 'サンプルテキストサンプルテキストサンプルテキスト',
+      empty: { search: '検索', searchText: '依頼バーで検索', scan: 'スキャン', scanText: '伝票、商品バーコード', list: 'リスト呼出', listText: 'サンプルテンプレ' },
+      table: { deal: '取引', code: 'コード', name: '品名', attr: '分類', qty: '数量', unit: '単価', amount: '金額', note: '備考' },
+      breakdownDetail: '内訳詳細', serialNo: 'シリアルNo', qtyCount: '点数', subtotal: '小計', tax: '税', productIn: '商品入', couponInfo: 'クーポン情報', couponA: 'クーポンA', couponB: 'クーポンB', couponC: 'クーポンC', couponD: 'クーポンD', discountTotal: '値引額合計', couponDiscount: 'クーポン値引', totalAmount: '合計金額',
+      depositType: '入金区分', creditSettlement: 'クレジット決済', credit: 'クレジット', cashlessSettlement: 'キャッシュレス・その他決済', barcodePay: 'バーコード決済', eMoney: '電子マネー', otherPay: 'その他決済', cashSettlement: '現金決済', amountInput: '金額を入力', change: 'おつり', billingInfo: '請求情報', discount: '値引額', paymentBreakdown: '支払内訳', cash: '現金', pay: '○○Pay', balance: '残額',
+      cancel: 'キャンセル', done: '完了', confirm: '確定', retry: '再試行',
+      dialog: { cardTitle: 'クレジットカード支払い', selectCard: 'クレジットカード会社を選択してください', cardAmount: 'クレジットカードでのお支払い金額', terminalComplete: '決済端末処理完了', icWith: 'ICチップあり', icWithout: 'ICチップなし', authCard: '認証カード', cancelDeal: '取引の中止', terminalGuide: '端末の案内に従って処理してください', installmentTitle: '支払い回数', selectInstallment: 'お支払い回数を選択してください', cardProcessing: 'クレジットカード支払い処理中', terminalInput: '決済端末入力をお願いします。', barcodeTitle: 'スマホコード決済', barcodeAmount: 'スマホコード決済でのお支払い金額', scanCustomerBarcode: 'お客様のスマホのバーコードをスキャンしてください' },
+      denomination: '金種', count: '枚数', amount: '金額', adjustmentPlaceholder: '調整などは金額を直接入力してください', registerConfirmedNote: '全体レジ閉設02\nレジ閉設画面で確定した\nパターンに\n数字が反映されたもの', prevCashReserve: '前日までの釣銭準備金設定反映', cashDetail: '預かり詳細', safeCash: '金庫金', registerCash: 'レジ金', cashReserve: '準備釣銭', cashDifference: '現金過不足', receiptTitle: '印刷パターン番号テスト　06月16日（火）', receiptBody: '・棚卸の内容を出力します\n・商品分類別集計データを出力します\n・出力帳票を確認してください\n\n\n\n\n\nPrinted with Front test receipt mock.',
+    },
     inventory: {
       gross: {
         title: 'グロス在庫登録',

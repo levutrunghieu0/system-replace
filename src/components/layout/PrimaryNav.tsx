@@ -128,8 +128,12 @@ export default function PrimaryNav({ activeKey, onSelect }: PrimaryNavProps) {
   const { t, i18n } = useTranslation()
 
   const toggleLanguage = () => {
-    i18n.changeLanguage(i18n.language === 'ja' ? 'en' : 'ja')
+    const languages = ['ja', 'en', 'vi']
+    const currentIndex = languages.findIndex((language) => i18n.language.startsWith(language))
+    i18n.changeLanguage(languages[(currentIndex + 1) % languages.length])
   }
+
+  const currentLanguageLabel = i18n.language.startsWith('vi') ? 'VI' : i18n.language.startsWith('en') ? 'EN' : 'JA'
 
   return (
     <Box
@@ -205,7 +209,12 @@ export default function PrimaryNav({ activeKey, onSelect }: PrimaryNavProps) {
         <Tooltip title={t('language.toggle')} placement="right" arrow>
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.75 }}>
             <IconButton size="small" color="default" onClick={toggleLanguage}>
-              <LanguageIcon fontSize="small" />
+              <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <LanguageIcon fontSize="small" />
+                <Typography component="span" sx={{ position: 'absolute', top: 14, fontSize: 8, fontWeight: 800, lineHeight: 1 }}>
+                  {currentLanguageLabel}
+                </Typography>
+              </Box>
             </IconButton>
           </Box>
         </Tooltip>
