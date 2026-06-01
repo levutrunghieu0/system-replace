@@ -54,36 +54,45 @@ interface PaymentState {
   cash: number
 }
 
-interface SaleRow {
-  deal: string
+interface ProductCatalogItem {
   code: string
   name: string
   attr: string
-  qty: string
-  unit: string
-  amount: string
+  unitPrice: number
   tax: string
-  tone?: 'red' | 'blue'
-  divider?: boolean
+}
+
+interface CartItem extends ProductCatalogItem {
+  qty: number
 }
 
 const BLUE = '#1478f0'
 const BORDER = '#d8dee6'
 const HEADER_BG = '#f4f6f8'
 const SOFT_BLUE = '#eef6ff'
-const saleRows: SaleRow[] = [
-  { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '1', unit: '¥2,000', amount: '¥2,000', tax: 'あああ' },
-  { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '10,000', unit: '¥0,800,000', amount: '¥10,000,000', tax: 'あああ', tone: 'red' },
-  { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '100', unit: '¥1,000', amount: '¥900', tax: '税込' },
-  { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '10,000', unit: '¥0,800,000', amount: '¥10,000,000', tax: '非課税', tone: 'blue' },
-  { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '1,000', unit: '¥1', amount: '¥1,000,000', tax: 'あああ', divider: true },
-  { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '10,000', unit: '¥0,800,000', amount: '¥10,000,000', tax: 'あああ' },
-]
 const denominations = ['10,000円', '5,000円', '2,000円', '1,000円', '500円', '100円', '50円', '10円', '5円', '1円']
 const denominationValues = [10000, 5000, 2000, 1000, 500, 100, 50, 10, 5, 1]
-const PAYMENT_TOTAL = 10000
 const emptyPayments: PaymentState = { credit: 0, barcode: 0, emoney: 0, cash: 0 }
+const productCatalog: ProductCatalogItem[] = [
+  { code: '4901234567890', name: 'JORDAN BRAND AS M\nJERS NIKE JP', attr: 'S', unitPrice: 8800, tax: '税込' },
+  { code: '1234567890123', name: 'NIKE AIR MAX 90\nBLACK/WHITE', attr: 'M', unitPrice: 12800, tax: '税込' },
+  { code: '9876543210987', name: 'ADIDAS ORIGINALS TEE\nTREFOIL LOGO', attr: 'L', unitPrice: 3200, tax: '税込' },
+]
 const formatYen = (value: number) => `¥${value.toLocaleString()}`
+const getCartTotal = (items: CartItem[]) => items.reduce((sum, item) => sum + item.unitPrice * item.qty, 0)
+
+function findProductByScan(scannedCode: string): ProductCatalogItem {
+  const product = productCatalog.find((item) => item.code === scannedCode)
+  if (product) return product
+
+  return {
+    code: scannedCode,
+    name: `SCAN ITEM\n${scannedCode}`,
+    attr: '-',
+    unitPrice: 1000,
+    tax: '税込',
+  }
+}
 
 function FrontPage() {
   const { t } = useTranslation()
@@ -93,21 +102,50 @@ function FrontPage() {
   const [showReceipt, setShowReceipt] = useState(false)
   const [payments, setPayments] = useState<PaymentState>(emptyPayments)
   const [registerCounts, setRegisterCounts] = useState(() => denominations.map((_, index) => index === 0 ? 10 : 0))
+  const [scanValue, setScanValue] = useState('')
+  const [cartItems, setCartItems] = useState<CartItem[]>([])
 
+  const paymentTotal = getCartTotal(cartItems)
   const paidTotal = payments.credit + payments.barcode + payments.emoney + payments.cash
-  const paymentBalance = Math.max(PAYMENT_TOTAL - paidTotal, 0)
+  const paymentBalance = Math.max(paymentTotal - paidTotal, 0)
+
+  const resetPayments = () => setPayments(emptyPayments)
+  const addProductByScan = () => {
+    const code = scanValue.trim() || productCatalog[cartItems.length % productCatalog.length].code
+    const product = findProductByScan(code)
+    setCartItems((currentItems) => {
+      const existingItem = currentItems.find((item) => item.code === product.code)
+      if (existingItem) {
+        return currentItems.map((item) => item.code === product.code ? { ...item, qty: item.qty + 1 } : item)
+      }
+      return [...currentItems, { ...product, qty: 1 }]
+    })
+    setScanValue('')
+    resetPayments()
+    setMode('sale-cart')
+  }
+  const updateCartQuantity = (code: string, nextQty: number) => {
+    setCartItems((currentItems) => currentItems
+      .map((item) => item.code === code ? { ...item, qty: Math.max(nextQty, 0) } : item)
+      .filter((item) => item.qty > 0))
+    resetPayments()
+  }
   const completePayment = (method: PayMethod) => {
     setPayments((currentPayments) => {
       const currentPaidTotal = currentPayments.credit + currentPayments.barcode + currentPayments.emoney + currentPayments.cash
-      const currentBalance = Math.max(PAYMENT_TOTAL - currentPaidTotal, 0)
+      const currentBalance = Math.max(paymentTotal - currentPaidTotal, 0)
       return currentBalance === 0 ? currentPayments : { ...currentPayments, [method]: currentPayments[method] + currentBalance }
     })
   }
   const resetFlow = () => {
     setMode('sale-empty')
     setDialog(null)
+    setSelectedCoupon('couponA')
+    setShowReceipt(false)
     setPayments(emptyPayments)
     setRegisterCounts(denominations.map((_, index) => index === 0 ? 10 : 0))
+    setScanValue('')
+    setCartItems([])
   }
 
   const title = mode.startsWith('register')
@@ -123,32 +161,20 @@ function FrontPage() {
     if (mode === 'sale-empty') {
       return [
         stop,
-        { key: 'prev-day', labelKey: 'page.front.action.prevDayReflect', variant: 'outlined' as const, position: 'left' as const, disabled: true, onClick: () => undefined },
-        { key: 'ticket-list', labelKey: 'page.front.action.ticketList', variant: 'outlined' as const, position: 'left' as const, onClick: () => setMode('sale-cart') },
-        { key: 'reception', labelKey: 'page.front.action.receptionTicket', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'reception-info', labelKey: 'page.front.action.receptionInfo', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'receipt-fix', labelKey: 'page.front.action.receiptFix', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'correction', labelKey: 'page.front.action.correction', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
+        { key: 'scan', labelKey: 'page.front.empty.scan', variant: 'contained' as const, position: 'left' as const, onClick: addProductByScan },
         { key: 'checkout', labelKey: 'page.front.action.checkout', variant: 'contained' as const, position: 'right' as const, disabled: true, onClick: () => undefined },
       ]
     }
     if (mode === 'sale-cart') {
       return [
         stop,
-        { key: 'prev-day', labelKey: 'page.front.action.prevDayReflect', variant: 'outlined' as const, position: 'left' as const, disabled: true, onClick: () => undefined },
-        { key: 'ticket-list', labelKey: 'page.front.action.ticketList', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'reception', labelKey: 'page.front.action.receptionTicket', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'reception-info', labelKey: 'page.front.action.receptionInfo', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'receipt-fix', labelKey: 'page.front.action.receiptFix', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'correction', labelKey: 'page.front.action.correction', variant: 'outlined' as const, position: 'left' as const, onClick: () => undefined },
-        { key: 'checkout', labelKey: 'page.front.action.checkout', variant: 'contained' as const, position: 'right' as const, onClick: () => setMode('payment') },
+        { key: 'scan', labelKey: 'page.front.empty.scan', variant: 'contained' as const, position: 'left' as const, onClick: addProductByScan },
+        { key: 'checkout', labelKey: 'page.front.action.checkout', variant: 'contained' as const, position: 'right' as const, disabled: cartItems.length === 0, onClick: () => setMode('payment') },
       ]
     }
     if (mode === 'payment') {
       return [
-        { ...stop, onClick: () => setMode('sale-cart') },
-        { key: 'sample-a', labelKey: 'page.front.sample', variant: 'outlined' as const, position: 'left' as const, onClick: () => { completePayment('emoney'); setDialog('paymentComplete') } },
-        { key: 'sample-b', labelKey: 'page.front.sample', variant: 'outlined' as const, position: 'left' as const, onClick: () => setDialog('installment') },
+        { ...stop, onClick: () => setMode(cartItems.length ? 'sale-cart' : 'sale-empty') },
         { key: 'finish', labelKey: 'page.front.action.finish', variant: 'contained' as const, position: 'right' as const, disabled: paymentBalance > 0, onClick: () => setMode('register-count') },
       ]
     }
@@ -164,51 +190,62 @@ function FrontPage() {
     showBackButton: mode !== 'sale-empty',
     hideSecondaryNav: true,
     actions,
-    onBack: () => setMode(mode === 'payment' ? 'sale-cart' : mode.startsWith('register') ? 'payment' : 'sale-empty'),
+    onBack: () => setMode(mode === 'payment' ? (cartItems.length ? 'sale-cart' : 'sale-empty') : mode.startsWith('register') ? 'payment' : 'sale-empty'),
   })
 
   return (
     <Box sx={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-      {mode === 'sale-empty' && <SaleWorkspace empty onAdd={() => setMode('sale-cart')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
-      {mode === 'sale-cart' && <SaleWorkspace onAdd={() => setMode('payment')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
-      {mode === 'payment' && <PaymentWorkspace payments={payments} balance={paymentBalance} onOpenDialog={setDialog} onCashPayment={() => completePayment('cash')} onEMoneyPayment={() => { completePayment('emoney'); setDialog('paymentComplete') }} />}
+      {(mode === 'sale-empty' || mode === 'sale-cart') && (
+        <SaleWorkspace
+          cartItems={cartItems}
+          scanValue={scanValue}
+          selectedCoupon={selectedCoupon}
+          onCouponChange={setSelectedCoupon}
+          onQuantityChange={updateCartQuantity}
+          onScan={addProductByScan}
+          onScanValueChange={setScanValue}
+        />
+      )}
+      {mode === 'payment' && <PaymentWorkspace cartItems={cartItems} payments={payments} total={paymentTotal} balance={paymentBalance} onOpenDialog={setDialog} onCashPayment={() => completePayment('cash')} onEMoneyPayment={() => { completePayment('emoney'); setDialog('paymentComplete') }} />}
       {(mode === 'register-count' || mode === 'register-confirmed') && <RegisterCount confirmed={mode === 'register-confirmed'} counts={registerCounts} onCountChange={(index, nextCount) => setRegisterCounts((currentCounts) => currentCounts.map((count, countIndex) => countIndex === index ? Math.max(nextCount, 0) : count))} />}
-      <PaymentDialogs dialog={dialog} onClose={() => setDialog(null)} onDialog={setDialog} onCompletePayment={completePayment} />
+      <PaymentDialogs dialog={dialog} total={paymentTotal} onClose={() => setDialog(null)} onDialog={setDialog} onCompletePayment={completePayment} />
       <ReceiptOverlay open={showReceipt} onClose={() => { setShowReceipt(false); setMode('register-count') }} />
     </Box>
   )
 }
 
-function SaleWorkspace({ empty = false, onAdd, selectedCoupon, onCouponChange }: { empty?: boolean; onAdd: () => void; selectedCoupon: string; onCouponChange: (coupon: string) => void }) {
+function SaleWorkspace({ cartItems, scanValue, selectedCoupon, onCouponChange, onQuantityChange, onScan, onScanValueChange }: { cartItems: CartItem[]; scanValue: string; selectedCoupon: string; onCouponChange: (coupon: string) => void; onQuantityChange: (code: string, nextQty: number) => void; onScan: () => void; onScanValueChange: (value: string) => void }) {
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 292px', gap: 1 }}>
       <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-        <SaleToolbar onAdd={onAdd} />
+        <SaleToolbar scanValue={scanValue} onScan={onScan} onScanValueChange={onScanValueChange} />
         <Paper variant="outlined" sx={{ flex: 1, minHeight: 0, overflow: 'hidden', bgcolor: 'white', borderColor: BORDER }}>
-          {empty ? <EmptySaleCanvas /> : <SaleTable />}
+          {cartItems.length === 0 ? <EmptySaleCanvas /> : <SaleTable cartItems={cartItems} onQuantityChange={onQuantityChange} />}
         </Paper>
       </Box>
-      {empty ? <EmptyDetail /> : <SaleDetail selectedCoupon={selectedCoupon} onCouponChange={onCouponChange} />}
+      {cartItems.length === 0 ? <EmptyDetail /> : <SaleDetail cartItems={cartItems} selectedCoupon={selectedCoupon} onCouponChange={onCouponChange} />}
     </Box>
   )
 }
 
-function SaleToolbar({ onAdd }: { onAdd: () => void }) {
+function SaleToolbar({ scanValue, onScan, onScanValueChange }: { scanValue: string; onScan: () => void; onScanValueChange: (value: string) => void }) {
   const { t } = useTranslation()
 
   return (
     <Box sx={{ height: 36, display: 'flex', alignItems: 'center', gap: 0.75 }}>
       <OutlinedInput
         size="small"
-        placeholder={t('header.search')}
+        value={scanValue}
+        placeholder={t('page.front.empty.scanText')}
+        onChange={(event) => onScanValueChange(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter') onScan() }}
         startAdornment={<InputAdornment position="start"><SearchIcon sx={{ fontSize: 17 }} /></InputAdornment>}
         endAdornment={<InputAdornment position="end"><TuneIcon sx={{ fontSize: 17 }} /></InputAdornment>}
-        sx={{ width: 345, height: 32, bgcolor: 'white', fontSize: 12 }}
+        sx={{ width: 420, height: 32, bgcolor: 'white', fontSize: 12 }}
       />
-      <Button onClick={onAdd} size="small" variant="contained" sx={{ height: 28, minWidth: 82, fontSize: 11 }}>{t('page.front.action.createCase')}</Button>
-      {[1, 2, 3].map((item) => <Chip key={item} label={t('page.front.sample')} variant="outlined" size="small" sx={{ height: 25, fontSize: 11 }} />)}
+      <Button onClick={onScan} size="small" variant="contained" startIcon={<QrCodeScannerIcon />} sx={{ height: 28, minWidth: 96, fontSize: 11 }}>{t('page.front.empty.scan')}</Button>
       <Box sx={{ flex: 1 }} />
-      <Radio size="small" sx={{ p: 0.25 }} /><Typography variant="caption">{t('page.front.sale')}</Typography>
+      <Radio size="small" checked sx={{ p: 0.25 }} /><Typography variant="caption">{t('page.front.sale')}</Typography>
       <Radio size="small" sx={{ p: 0.25 }} /><Typography variant="caption">{t('page.front.newest')}</Typography>
     </Box>
   )
@@ -235,7 +272,7 @@ function EmptySaleCanvas() {
   )
 }
 
-function SaleTable() {
+function SaleTable({ cartItems, onQuantityChange }: { cartItems: CartItem[]; onQuantityChange: (code: string, nextQty: number) => void }) {
   const { t } = useTranslation()
   const columns = ['deal', 'code', 'name', 'attr', 'qty', 'unit', 'amount', 'note']
 
@@ -245,20 +282,30 @@ function SaleTable() {
         <TableRow>{columns.map((column) => <TableCell key={column} align={['qty', 'unit', 'amount'].includes(column) ? 'right' : 'left'}>{t(`page.front.table.${column}`)}</TableCell>)}</TableRow>
       </TableHead>
       <TableBody>
-        {saleRows.map((row, index) => (
-          <TableRow key={`${row.code}-${index}`} sx={{ borderTop: row.divider ? `2px dashed ${BLUE}` : undefined }}>
-            <TableCell sx={{ width: 60 }}>{row.deal}</TableCell>
-            <TableCell>{row.code}</TableCell>
-            <TableCell sx={{ width: 185, fontWeight: 700 }}>{row.name}</TableCell>
-            <TableCell>{row.attr}</TableCell>
-            <TableCell align="right">{row.qty}</TableCell>
-            <TableCell align="right">{row.unit}</TableCell>
-            <TableCell align="right" sx={{ color: row.tone === 'red' ? 'error.main' : row.tone === 'blue' ? BLUE : 'text.primary', fontWeight: 800 }}>{row.amount}<Typography variant="caption" display="block" color="primary">税込 +¥1,000</Typography></TableCell>
-            <TableCell>{row.tax}</TableCell>
+        {cartItems.map((item) => (
+          <TableRow key={item.code}>
+            <TableCell sx={{ width: 60 }}>{t('page.front.sale')}</TableCell>
+            <TableCell>{item.code}</TableCell>
+            <TableCell sx={{ width: 185, fontWeight: 700 }}>{item.name}</TableCell>
+            <TableCell>{item.attr}</TableCell>
+            <TableCell align="right"><QuantityButtons value={item.qty} onChange={(nextQty) => onQuantityChange(item.code, nextQty)} /></TableCell>
+            <TableCell align="right">{formatYen(item.unitPrice)}</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 800 }}>{formatYen(item.unitPrice * item.qty)}</TableCell>
+            <TableCell>{item.tax}</TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
+  )
+}
+
+function QuantityButtons({ value, onChange }: { value: number; onChange: (nextValue: number) => void }) {
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+      <IconButton size="small" onClick={() => onChange(value - 1)} sx={{ border: '1px solid', borderColor: BORDER, borderRadius: 0.5, width: 22, height: 22 }}><RemoveIcon sx={{ fontSize: 14 }} /></IconButton>
+      <Typography variant="caption" sx={{ minWidth: 22, textAlign: 'center', fontWeight: 700 }}>{value}</Typography>
+      <IconButton size="small" onClick={() => onChange(value + 1)} sx={{ border: '1px solid', borderColor: BORDER, borderRadius: 0.5, width: 22, height: 22 }}><AddIcon sx={{ fontSize: 14 }} /></IconButton>
+    </Box>
   )
 }
 
@@ -277,9 +324,11 @@ function EmptyDetail() {
   )
 }
 
-function SaleDetail({ selectedCoupon, onCouponChange }: { selectedCoupon: string; onCouponChange: (coupon: string) => void }) {
+function SaleDetail({ cartItems, selectedCoupon, onCouponChange }: { cartItems: CartItem[]; selectedCoupon: string; onCouponChange: (coupon: string) => void }) {
   const { t } = useTranslation()
   const coupons = ['couponA', 'couponB', 'couponC', 'couponD']
+  const subtotal = getCartTotal(cartItems)
+  const qtyCount = cartItems.reduce((sum, item) => sum + item.qty, 0)
 
   return (
     <SidePanel title={<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>{t('page.front.breakdownDetail')} <Chip label={t('page.front.productIn')} color="primary" size="small" sx={{ height: 18, fontSize: 9 }} /></Box>}>
@@ -295,18 +344,18 @@ function SaleDetail({ selectedCoupon, onCouponChange }: { selectedCoupon: string
         </Box>
       ))}
       <Box sx={{ flex: 1 }} />
-      <SummaryLine label={t('page.front.qtyCount')} value="1点" />
-      <SummaryLine label={t('page.front.subtotal')} value="¥10,000" />
-      <SummaryLine label={t('page.front.tax')} value="¥1,000" />
-      <SummaryLine label={t('page.front.discountTotal')} value="-¥1,000" danger />
-      <SummaryLine label={t('page.front.couponDiscount')} value="-¥1,000" danger />
+      <SummaryLine label={t('page.front.qtyCount')} value={`${qtyCount}点`} />
+      <SummaryLine label={t('page.front.subtotal')} value={formatYen(subtotal)} />
+      <SummaryLine label={t('page.front.tax')} value="税込" />
+      <SummaryLine label={t('page.front.discountTotal')} value="¥0" />
+      <SummaryLine label={t('page.front.couponDiscount')} value="¥0" />
       <Divider sx={{ my: 1 }} />
-      <SummaryLine label={t('page.front.totalAmount')} value="¥8,800" blue large />
+      <SummaryLine label={t('page.front.totalAmount')} value={formatYen(subtotal)} blue large />
     </SidePanel>
   )
 }
 
-function PaymentWorkspace({ payments, balance, onOpenDialog, onCashPayment, onEMoneyPayment }: { payments: PaymentState; balance: number; onOpenDialog: (dialog: DialogMode) => void; onCashPayment: () => void; onEMoneyPayment: () => void }) {
+function PaymentWorkspace({ cartItems, payments, total, balance, onOpenDialog, onCashPayment, onEMoneyPayment }: { cartItems: CartItem[]; payments: PaymentState; total: number; balance: number; onOpenDialog: (dialog: DialogMode) => void; onCashPayment: () => void; onEMoneyPayment: () => void }) {
   const { t } = useTranslation()
 
   return (
@@ -314,11 +363,11 @@ function PaymentWorkspace({ payments, balance, onOpenDialog, onCashPayment, onEM
       <Box sx={{ minHeight: 0, display: 'grid', gridTemplateRows: 'minmax(0, 1fr) 188px', gap: 1 }}>
         <Paper variant="outlined" sx={{ overflow: 'hidden', borderColor: BORDER }}>
           <Table size="small" sx={{ '& th': { bgcolor: HEADER_BG, fontSize: 11 }, '& td': { fontSize: 12 } }}>
-            <TableHead><TableRow><TableCell>{t('page.front.depositType')}</TableCell><TableCell align="right">{t('page.front.totalAmount')}</TableCell></TableRow></TableHead>
-            <TableBody>{[1, 2, 3].map((item) => <TableRow key={item}><TableCell>{t('page.front.longSample')}</TableCell><TableCell align="right">¥00,000,000</TableCell></TableRow>)}</TableBody>
+            <TableHead><TableRow><TableCell>{t('page.front.table.name')}</TableCell><TableCell align="right">{t('page.front.totalAmount')}</TableCell></TableRow></TableHead>
+            <TableBody>{cartItems.map((item) => <TableRow key={item.code}><TableCell>{item.name}</TableCell><TableCell align="right">{formatYen(item.unitPrice * item.qty)}</TableCell></TableRow>)}</TableBody>
           </Table>
         </Paper>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}><BillPanel /><PaymentBreakdown payments={payments} balance={balance} /></Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}><BillPanel cartItems={cartItems} total={total} /><PaymentBreakdown payments={payments} balance={balance} /></Box>
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <PayCard title={t('page.front.creditSettlement')}><PayButton icon={<CreditCardIcon />} label={t('page.front.credit')} onClick={() => onOpenDialog('cardSelect')} /></PayCard>
@@ -329,16 +378,17 @@ function PaymentWorkspace({ payments, balance, onOpenDialog, onCashPayment, onEM
           </Box>
           <Button onClick={onEMoneyPayment} sx={{ mt: 1, height: 36 }} variant="contained" fullWidth>{t('page.front.otherPay')}</Button>
         </PayCard>
-        <PayCard title={t('page.front.cashSettlement')}><TextField size="small" placeholder={t('page.front.amountInput')} value={formatYen(balance || PAYMENT_TOTAL)} fullWidth /><Button onClick={onCashPayment} variant="contained" size="small" fullWidth sx={{ mt: 1 }}>{t('page.front.confirm')}</Button><SummaryLine label={t('page.front.change')} value={formatYen(Math.max(payments.cash - PAYMENT_TOTAL, 0))} blue /></PayCard>
+        <PayCard title={t('page.front.cashSettlement')}><TextField size="small" placeholder={t('page.front.amountInput')} value={formatYen(balance)} fullWidth /><Button onClick={onCashPayment} variant="contained" size="small" fullWidth sx={{ mt: 1 }}>{t('page.front.confirm')}</Button><SummaryLine label={t('page.front.change')} value="¥0" blue /></PayCard>
       </Box>
     </Box>
   )
 }
 
-function BillPanel() {
+function BillPanel({ cartItems, total }: { cartItems: CartItem[]; total: number }) {
   const { t } = useTranslation()
+  const qtyCount = cartItems.reduce((sum, item) => sum + item.qty, 0)
 
-  return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.billingInfo')}</Typography><SummaryLine label={t('page.front.qtyCount')} value="1点" /><SummaryLine label={t('page.front.discount')} value="-¥1,000" danger /><SummaryLine label={t('page.front.subtotal')} value="¥10,000" /><SummaryLine label={t('page.front.tax')} value="¥1,000" /><Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.totalAmount')} value={formatYen(PAYMENT_TOTAL)} blue /></Paper>
+  return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.billingInfo')}</Typography><SummaryLine label={t('page.front.qtyCount')} value={`${qtyCount}点`} /><SummaryLine label={t('page.front.discount')} value="¥0" /><SummaryLine label={t('page.front.subtotal')} value={formatYen(total)} /><SummaryLine label={t('page.front.tax')} value="税込" /><Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.totalAmount')} value={formatYen(total)} blue /></Paper>
 }
 
 function PaymentBreakdown({ payments, balance }: { payments: PaymentState; balance: number }) {
@@ -347,15 +397,15 @@ function PaymentBreakdown({ payments, balance }: { payments: PaymentState; balan
   return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.paymentBreakdown')}</Typography><SummaryLine label={t('page.front.cash')} value={formatYen(payments.cash)} /><SummaryLine label={t('page.front.credit')} value={formatYen(payments.credit)} /><SummaryLine label={t('page.front.barcodePay')} value={formatYen(payments.barcode)} /><SummaryLine label={t('page.front.eMoney')} value={formatYen(payments.emoney)} /><Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.balance')} value={formatYen(balance)} danger={balance > 0} blue={balance === 0} /></Paper>
 }
 
-function PaymentDialogs({ dialog, onClose, onDialog, onCompletePayment }: { dialog: DialogMode; onClose: () => void; onDialog: (dialog: DialogMode) => void; onCompletePayment: (method: PayMethod) => void }) {
+function PaymentDialogs({ dialog, total, onClose, onDialog, onCompletePayment }: { dialog: DialogMode; total: number; onClose: () => void; onDialog: (dialog: DialogMode) => void; onCompletePayment: (method: PayMethod) => void }) {
   const { t } = useTranslation()
 
-  if (dialog === 'cardSelect') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => onDialog('cardAmount')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectCard')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, mt: 2 }}>{Array.from({ length: 12 }, (_, index) => <Button key={index} variant={index === 0 ? 'contained' : 'outlined'}>{t('page.front.sample')}</Button>)}</Box></CommonDialog>
-  if (dialog === 'cardAmount') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('credit'); onDialog('paymentComplete') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value="¥10,000" blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.cardAmount')} value="¥10,000" /></CommonDialog>
+  if (dialog === 'cardSelect') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => onDialog('cardAmount')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectCard')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, mt: 2 }}>{['VISA', 'Master', 'JCB', 'AMEX', 'Diners', 'UnionPay', 'Debit', 'Discover'].map((label, index) => <Button key={label} variant={index === 0 ? 'contained' : 'outlined'}>{label}</Button>)}</Box></CommonDialog>
+  if (dialog === 'cardAmount') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('credit'); onDialog('paymentComplete') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value={formatYen(total)} blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.cardAmount')} value={formatYen(total)} /></CommonDialog>
   if (dialog === 'paymentComplete') return <CommonDialog icon={<CheckIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.terminalComplete')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.done')}><Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>{['icWith', 'icWithout', 'authCard', 'cancelDeal'].map((key) => <Card key={key} variant="outlined" sx={{ p: 2, bgcolor: '#f1f3f5' }}><Typography sx={{ fontWeight: 700 }}>{t(`page.front.dialog.${key}`)}</Typography><Typography variant="caption">{t('page.front.dialog.terminalGuide')}</Typography></Card>)}</Box></CommonDialog>
-  if (dialog === 'installment') return <CommonDialog title={t('page.front.dialog.installmentTitle')} onClose={onClose} onConfirm={() => onDialog('cardProcessing')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectInstallment')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1, mt: 2 }}>{['1回', '3回', '5回', '12回', 'リボ払い', 'サンプル', 'サンプル', 'サンプル', 'サンプル', 'サンプル'].map((label, index) => <Button key={`${label}-${index}`} variant={index === 0 ? 'contained' : 'outlined'}>{label}</Button>)}</Box></CommonDialog>
+  if (dialog === 'installment') return <CommonDialog title={t('page.front.dialog.installmentTitle')} onClose={onClose} onConfirm={() => onDialog('cardProcessing')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectInstallment')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1, mt: 2 }}>{['1回', '3回', '5回', '12回', 'リボ払い'].map((label, index) => <Button key={`${label}-${index}`} variant={index === 0 ? 'contained' : 'outlined'}>{label}</Button>)}</Box></CommonDialog>
   if (dialog === 'cardProcessing') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.cardProcessing')} onClose={onClose} onConfirm={() => { onCompletePayment('credit'); onClose() }} confirm={t('page.front.done')}><Typography align="center" sx={{ fontWeight: 700 }}>{t('page.front.dialog.terminalInput')}</Typography><LinearProgress sx={{ my: 2 }} /><Typography variant="caption" display="block" align="center">{t('page.front.dialog.terminalGuide')}</Typography></CommonDialog>
-  if (dialog === 'barcodeAmount') return <CommonDialog title={t('page.front.dialog.barcodeTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('barcode'); onDialog('barcodeScan') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value="¥10,000" blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.barcodeAmount')} value="¥10,000" /></CommonDialog>
+  if (dialog === 'barcodeAmount') return <CommonDialog title={t('page.front.dialog.barcodeTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('barcode'); onDialog('barcodeScan') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value={formatYen(total)} blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.barcodeAmount')} value={formatYen(total)} /></CommonDialog>
   if (dialog === 'barcodeScan') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.scanCustomerBarcode')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.done')} />
   return null
 }
