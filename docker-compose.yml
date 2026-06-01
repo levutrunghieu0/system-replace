@@ -1,0 +1,9 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frontend-app
+    ports:
+      - "3006:3006"
+    restart: unless-stopped
