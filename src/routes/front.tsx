@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -45,6 +45,14 @@ export const Route = createFileRoute('/front')({
 
 type FrontMode = 'idle' | 'sale-empty' | 'sale-cart' | 'payment' | 'register-blank' | 'register-count' | 'register-confirmed'
 type DialogMode = 'cardSelect' | 'cardAmount' | 'paymentComplete' | 'installment' | 'cardProcessing' | 'barcodeAmount' | 'barcodeScan' | null
+type PayMethod = 'credit' | 'barcode' | 'emoney' | 'cash'
+
+interface PaymentState {
+  credit: number
+  barcode: number
+  emoney: number
+  cash: number
+}
 
 interface SaleRow {
   deal: string
@@ -72,12 +80,35 @@ const saleRows: SaleRow[] = [
   { deal: 'サンプル', code: '12345\n67890\n12345', name: 'JORDAN BRAND AS M\nJERS NIKE JP\n特選コメント', attr: 'S', qty: '10,000', unit: '¥0,800,000', amount: '¥10,000,000', tax: 'あああ' },
 ]
 const denominations = ['10,000円', '5,000円', '2,000円', '1,000円', '500円', '100円', '50円', '10円', '5円', '1円']
+const denominationValues = [10000, 5000, 2000, 1000, 500, 100, 50, 10, 5, 1]
+const PAYMENT_TOTAL = 10000
+const emptyPayments: PaymentState = { credit: 0, barcode: 0, emoney: 0, cash: 0 }
+const formatYen = (value: number) => `¥${value.toLocaleString()}`
+
 function FrontPage() {
   const { t } = useTranslation()
   const [mode, setMode] = useState<FrontMode>('idle')
   const [dialog, setDialog] = useState<DialogMode>(null)
   const [selectedCoupon, setSelectedCoupon] = useState('couponA')
   const [showReceipt, setShowReceipt] = useState(false)
+  const [payments, setPayments] = useState<PaymentState>(emptyPayments)
+  const [registerCounts, setRegisterCounts] = useState(() => denominations.map((_, index) => index === 0 ? 10 : 0))
+
+  const paidTotal = payments.credit + payments.barcode + payments.emoney + payments.cash
+  const paymentBalance = Math.max(PAYMENT_TOTAL - paidTotal, 0)
+  const completePayment = (method: PayMethod) => {
+    setPayments((currentPayments) => {
+      const currentPaidTotal = currentPayments.credit + currentPayments.barcode + currentPayments.emoney + currentPayments.cash
+      const currentBalance = Math.max(PAYMENT_TOTAL - currentPaidTotal, 0)
+      return currentBalance === 0 ? currentPayments : { ...currentPayments, [method]: currentPayments[method] + currentBalance }
+    })
+  }
+  const resetFlow = () => {
+    setMode('idle')
+    setDialog(null)
+    setPayments(emptyPayments)
+    setRegisterCounts(denominations.map((_, index) => index === 0 ? 10 : 0))
+  }
 
   const title = mode.startsWith('register')
     ? t('page.front.title.registerOpen')
@@ -87,8 +118,8 @@ function FrontPage() {
         ? t('page.front.title.sales')
         : t('page.front.title.front')
 
-  const actions = useMemo(() => {
-    const stop = { key: 'stop', labelKey: 'page.front.action.stopWork', variant: 'outlined' as const, position: 'left' as const, onClick: () => setMode('idle') }
+  const actions = (() => {
+    const stop = { key: 'stop', labelKey: 'page.front.action.stopWork', variant: 'outlined' as const, position: 'left' as const, onClick: resetFlow }
     if (mode === 'idle') return [{ ...stop, disabled: true }]
     if (mode === 'sale-empty') {
       return [
@@ -117,9 +148,9 @@ function FrontPage() {
     if (mode === 'payment') {
       return [
         { ...stop, onClick: () => setMode('sale-cart') },
-        { key: 'sample-a', labelKey: 'page.front.sample', variant: 'outlined' as const, position: 'left' as const, onClick: () => setDialog('paymentComplete') },
+        { key: 'sample-a', labelKey: 'page.front.sample', variant: 'outlined' as const, position: 'left' as const, onClick: () => { completePayment('emoney'); setDialog('paymentComplete') } },
         { key: 'sample-b', labelKey: 'page.front.sample', variant: 'outlined' as const, position: 'left' as const, onClick: () => setDialog('installment') },
-        { key: 'finish', labelKey: 'page.front.action.finish', variant: 'contained' as const, position: 'right' as const, onClick: () => setMode('register-blank') },
+        { key: 'finish', labelKey: 'page.front.action.finish', variant: 'contained' as const, position: 'right' as const, disabled: paymentBalance > 0, onClick: () => setMode('register-blank') },
       ]
     }
     if (mode === 'register-blank') {
@@ -134,7 +165,7 @@ function FrontPage() {
       { key: 'prev-register', labelKey: mode === 'register-confirmed' ? 'page.front.action.prevCloseRelease' : 'page.front.action.prevCloseReflect', variant: 'outlined' as const, position: 'left' as const, onClick: () => setMode(mode === 'register-confirmed' ? 'register-count' : 'register-confirmed') },
       { key: 'run', labelKey: 'page.front.action.execute', variant: 'contained' as const, position: 'right' as const, onClick: () => setShowReceipt(true) },
     ]
-  }, [mode])
+  })()
 
   useLayoutConfig({
     title,
@@ -149,10 +180,10 @@ function FrontPage() {
       {mode === 'idle' && <BlankStage onStart={() => setMode('sale-empty')} />}
       {mode === 'sale-empty' && <SaleWorkspace empty onAdd={() => setMode('sale-cart')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
       {mode === 'sale-cart' && <SaleWorkspace onAdd={() => setMode('payment')} selectedCoupon={selectedCoupon} onCouponChange={setSelectedCoupon} />}
-      {mode === 'payment' && <PaymentWorkspace onOpenDialog={setDialog} />}
+      {mode === 'payment' && <PaymentWorkspace payments={payments} balance={paymentBalance} onOpenDialog={setDialog} onCashPayment={() => completePayment('cash')} onEMoneyPayment={() => { completePayment('emoney'); setDialog('paymentComplete') }} />}
       {mode === 'register-blank' && <BlankStage onStart={() => setMode('register-count')} />}
-      {(mode === 'register-count' || mode === 'register-confirmed') && <RegisterCount confirmed={mode === 'register-confirmed'} />}
-      <PaymentDialogs dialog={dialog} onClose={() => setDialog(null)} onDialog={setDialog} />
+      {(mode === 'register-count' || mode === 'register-confirmed') && <RegisterCount confirmed={mode === 'register-confirmed'} counts={registerCounts} onCountChange={(index, nextCount) => setRegisterCounts((currentCounts) => currentCounts.map((count, countIndex) => countIndex === index ? Math.max(nextCount, 0) : count))} />}
+      <PaymentDialogs dialog={dialog} onClose={() => setDialog(null)} onDialog={setDialog} onCompletePayment={completePayment} />
       <ReceiptOverlay open={showReceipt} onClose={() => { setShowReceipt(false); setMode('register-blank') }} />
     </Box>
   )
@@ -289,7 +320,7 @@ function SaleDetail({ selectedCoupon, onCouponChange }: { selectedCoupon: string
   )
 }
 
-function PaymentWorkspace({ onOpenDialog }: { onOpenDialog: (dialog: DialogMode) => void }) {
+function PaymentWorkspace({ payments, balance, onOpenDialog, onCashPayment, onEMoneyPayment }: { payments: PaymentState; balance: number; onOpenDialog: (dialog: DialogMode) => void; onCashPayment: () => void; onEMoneyPayment: () => void }) {
   const { t } = useTranslation()
 
   return (
@@ -301,18 +332,18 @@ function PaymentWorkspace({ onOpenDialog }: { onOpenDialog: (dialog: DialogMode)
             <TableBody>{[1, 2, 3].map((item) => <TableRow key={item}><TableCell>{t('page.front.longSample')}</TableCell><TableCell align="right">¥00,000,000</TableCell></TableRow>)}</TableBody>
           </Table>
         </Paper>
-        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}><BillPanel /><PaymentBreakdown /></Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}><BillPanel /><PaymentBreakdown payments={payments} balance={balance} /></Box>
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <PayCard title={t('page.front.creditSettlement')}><PayButton icon={<CreditCardIcon />} label={t('page.front.credit')} onClick={() => onOpenDialog('cardSelect')} /></PayCard>
         <PayCard title={t('page.front.cashlessSettlement')}>
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
             <PayButton icon={<QrCode2Icon />} label={t('page.front.barcodePay')} onClick={() => onOpenDialog('barcodeAmount')} />
-            <PayButton icon={<ContactlessIcon />} label={t('page.front.eMoney')} onClick={() => onOpenDialog('paymentComplete')} />
+            <PayButton icon={<ContactlessIcon />} label={t('page.front.eMoney')} onClick={onEMoneyPayment} />
           </Box>
-          <Button sx={{ mt: 1, height: 36 }} variant="contained" fullWidth>{t('page.front.otherPay')}</Button>
+          <Button onClick={onEMoneyPayment} sx={{ mt: 1, height: 36 }} variant="contained" fullWidth>{t('page.front.otherPay')}</Button>
         </PayCard>
-        <PayCard title={t('page.front.cashSettlement')}><TextField size="small" placeholder={t('page.front.amountInput')} fullWidth /><SummaryLine label={t('page.front.change')} value="¥0" blue /></PayCard>
+        <PayCard title={t('page.front.cashSettlement')}><TextField size="small" placeholder={t('page.front.amountInput')} value={formatYen(balance || PAYMENT_TOTAL)} fullWidth /><Button onClick={onCashPayment} variant="contained" size="small" fullWidth sx={{ mt: 1 }}>{t('page.front.confirm')}</Button><SummaryLine label={t('page.front.change')} value={formatYen(Math.max(payments.cash - PAYMENT_TOTAL, 0))} blue /></PayCard>
       </Box>
     </Box>
   )
@@ -321,29 +352,29 @@ function PaymentWorkspace({ onOpenDialog }: { onOpenDialog: (dialog: DialogMode)
 function BillPanel() {
   const { t } = useTranslation()
 
-  return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.billingInfo')}</Typography><SummaryLine label={t('page.front.qtyCount')} value="0点" /><SummaryLine label={t('page.front.discount')} value="-¥0" danger /><SummaryLine label={t('page.front.subtotal')} value="¥0" /><SummaryLine label={t('page.front.tax')} value="¥0" /><Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.totalAmount')} value="¥0" blue /></Paper>
+  return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.billingInfo')}</Typography><SummaryLine label={t('page.front.qtyCount')} value="1点" /><SummaryLine label={t('page.front.discount')} value="-¥1,000" danger /><SummaryLine label={t('page.front.subtotal')} value="¥10,000" /><SummaryLine label={t('page.front.tax')} value="¥1,000" /><Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.totalAmount')} value={formatYen(PAYMENT_TOTAL)} blue /></Paper>
 }
 
-function PaymentBreakdown() {
+function PaymentBreakdown({ payments, balance }: { payments: PaymentState; balance: number }) {
   const { t } = useTranslation()
 
-  return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.paymentBreakdown')}</Typography>{['cash', 'credit', 'pay'].map((method) => <SummaryLine key={method} label={t(`page.front.${method}`)} value="¥0" />)}<Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.balance')} value="¥0" danger /></Paper>
+  return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.paymentBreakdown')}</Typography><SummaryLine label={t('page.front.cash')} value={formatYen(payments.cash)} /><SummaryLine label={t('page.front.credit')} value={formatYen(payments.credit)} /><SummaryLine label={t('page.front.barcodePay')} value={formatYen(payments.barcode)} /><SummaryLine label={t('page.front.eMoney')} value={formatYen(payments.emoney)} /><Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.balance')} value={formatYen(balance)} danger={balance > 0} blue={balance === 0} /></Paper>
 }
 
-function PaymentDialogs({ dialog, onClose, onDialog }: { dialog: DialogMode; onClose: () => void; onDialog: (dialog: DialogMode) => void }) {
+function PaymentDialogs({ dialog, onClose, onDialog, onCompletePayment }: { dialog: DialogMode; onClose: () => void; onDialog: (dialog: DialogMode) => void; onCompletePayment: (method: PayMethod) => void }) {
   const { t } = useTranslation()
 
   if (dialog === 'cardSelect') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => onDialog('cardAmount')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectCard')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, mt: 2 }}>{Array.from({ length: 12 }, (_, index) => <Button key={index} variant={index === 0 ? 'contained' : 'outlined'}>{t('page.front.sample')}</Button>)}</Box></CommonDialog>
-  if (dialog === 'cardAmount') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => onDialog('paymentComplete')} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value="¥10,000" blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.cardAmount')} value="¥10,000" /></CommonDialog>
-  if (dialog === 'paymentComplete') return <CommonDialog icon={<CheckIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.terminalComplete')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.retry')}><Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>{['icWith', 'icWithout', 'authCard', 'cancelDeal'].map((key) => <Card key={key} variant="outlined" sx={{ p: 2, bgcolor: '#f1f3f5' }}><Typography sx={{ fontWeight: 700 }}>{t(`page.front.dialog.${key}`)}</Typography><Typography variant="caption">{t('page.front.dialog.terminalGuide')}</Typography></Card>)}</Box></CommonDialog>
+  if (dialog === 'cardAmount') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('credit'); onDialog('paymentComplete') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value="¥10,000" blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.cardAmount')} value="¥10,000" /></CommonDialog>
+  if (dialog === 'paymentComplete') return <CommonDialog icon={<CheckIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.terminalComplete')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.done')}><Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>{['icWith', 'icWithout', 'authCard', 'cancelDeal'].map((key) => <Card key={key} variant="outlined" sx={{ p: 2, bgcolor: '#f1f3f5' }}><Typography sx={{ fontWeight: 700 }}>{t(`page.front.dialog.${key}`)}</Typography><Typography variant="caption">{t('page.front.dialog.terminalGuide')}</Typography></Card>)}</Box></CommonDialog>
   if (dialog === 'installment') return <CommonDialog title={t('page.front.dialog.installmentTitle')} onClose={onClose} onConfirm={() => onDialog('cardProcessing')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectInstallment')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1, mt: 2 }}>{['1回', '3回', '5回', '12回', 'リボ払い', 'サンプル', 'サンプル', 'サンプル', 'サンプル', 'サンプル'].map((label, index) => <Button key={`${label}-${index}`} variant={index === 0 ? 'contained' : 'outlined'}>{label}</Button>)}</Box></CommonDialog>
-  if (dialog === 'cardProcessing') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.cardProcessing')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.retry')}><Typography align="center" sx={{ fontWeight: 700 }}>{t('page.front.dialog.terminalInput')}</Typography><LinearProgress sx={{ my: 2 }} /><Typography variant="caption" display="block" align="center">{t('page.front.dialog.terminalGuide')}</Typography></CommonDialog>
-  if (dialog === 'barcodeAmount') return <CommonDialog title={t('page.front.dialog.barcodeTitle')} onClose={onClose} onConfirm={() => onDialog('barcodeScan')} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value="¥10,000" blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.barcodeAmount')} value="¥10,000" /></CommonDialog>
-  if (dialog === 'barcodeScan') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.scanCustomerBarcode')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.retry')} />
+  if (dialog === 'cardProcessing') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.cardProcessing')} onClose={onClose} onConfirm={() => { onCompletePayment('credit'); onClose() }} confirm={t('page.front.done')}><Typography align="center" sx={{ fontWeight: 700 }}>{t('page.front.dialog.terminalInput')}</Typography><LinearProgress sx={{ my: 2 }} /><Typography variant="caption" display="block" align="center">{t('page.front.dialog.terminalGuide')}</Typography></CommonDialog>
+  if (dialog === 'barcodeAmount') return <CommonDialog title={t('page.front.dialog.barcodeTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('barcode'); onDialog('barcodeScan') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value="¥10,000" blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.barcodeAmount')} value="¥10,000" /></CommonDialog>
+  if (dialog === 'barcodeScan') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.scanCustomerBarcode')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.done')} />
   return null
 }
 
-function RegisterCount({ confirmed }: { confirmed: boolean }) {
+function RegisterCount({ confirmed, counts, onCountChange }: { confirmed: boolean; counts: number[]; onCountChange: (index: number, nextCount: number) => void }) {
   const { t } = useTranslation()
 
   return (
@@ -351,37 +382,37 @@ function RegisterCount({ confirmed }: { confirmed: boolean }) {
       <Paper variant="outlined" sx={{ p: 1, position: 'relative', bgcolor: confirmed ? '#fff0f2' : 'white', overflow: 'auto', borderColor: confirmed ? '#ffc9d1' : BORDER }}>
         <Table size="small" sx={{ '& th': { bgcolor: HEADER_BG, fontSize: 11 }, '& td': { fontSize: 12, py: 0.45 } }}>
           <TableHead><TableRow><TableCell>{t('page.front.denomination')}</TableCell><TableCell>{t('page.front.count')}</TableCell><TableCell align="right">{t('page.front.amount')}</TableCell></TableRow></TableHead>
-          <TableBody>{denominations.map((denomination, index) => <RegisterDenominationRow key={denomination} denomination={denomination} index={index} />)}</TableBody>
+          <TableBody>{denominations.map((denomination, index) => <RegisterDenominationRow key={denomination} denomination={denomination} index={index} count={counts[index]} onCountChange={onCountChange} />)}</TableBody>
         </Table>
         {confirmed && <Typography sx={{ position: 'absolute', left: 170, top: 215, color: 'error.main', fontSize: 28, fontWeight: 900, lineHeight: 1.55, textAlign: 'center', whiteSpace: 'pre-line' }}>{t('page.front.registerConfirmedNote')}</Typography>}
         <TextField size="small" placeholder={t('page.front.adjustmentPlaceholder')} fullWidth sx={{ mt: 0.8, bgcolor: 'white' }} />
       </Paper>
-      {confirmed ? <RegisterConfirmedSide /> : <SidePanel title={t('page.front.breakdownDetail')}><InfoBox icon={<InfoOutlinedIcon color="primary" />} label={t('page.front.prevCashReserve')} value="¥000,000,000" /><InfoBox icon={<AccountBalanceWalletIcon color="error" />} label={t('page.front.cashDetail')} value="-¥000,000,000" danger /><Box sx={{ flex: 1 }} /><SummaryLine label={t('page.front.totalAmount')} value="¥0" blue /></SidePanel>}
+      {confirmed ? <RegisterConfirmedSide total={counts.reduce((sum, count, index) => sum + count * denominationValues[index], 0)} /> : <SidePanel title={t('page.front.breakdownDetail')}><InfoBox icon={<InfoOutlinedIcon color="primary" />} label={t('page.front.prevCashReserve')} value="¥000,000,000" /><InfoBox icon={<AccountBalanceWalletIcon color="error" />} label={t('page.front.cashDetail')} value="-¥000,000,000" danger /><Box sx={{ flex: 1 }} /><SummaryLine label={t('page.front.totalAmount')} value="¥0" blue /></SidePanel>}
     </Box>
   )
 }
 
-function RegisterDenominationRow({ denomination, index }: { denomination: string; index: number }) {
+function RegisterDenominationRow({ denomination, index, count, onCountChange }: { denomination: string; index: number; count: number; onCountChange: (index: number, nextCount: number) => void }) {
   return (
     <TableRow>
       <TableCell sx={{ width: 90 }}>{denomination}</TableCell>
       <TableCell>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          <IconButton size="small" sx={{ border: '1px solid', borderColor: BORDER, borderRadius: 0.5, width: 22, height: 22 }}><RemoveIcon sx={{ fontSize: 14 }} /></IconButton>
-          <TextField size="small" value={index === 0 ? '10' : ''} sx={{ width: 54, '& input': { textAlign: 'center', p: 0.45, fontSize: 12 } }} />
-          <IconButton size="small" sx={{ border: '1px solid', borderColor: BORDER, borderRadius: 0.5, width: 22, height: 22 }}><AddIcon sx={{ fontSize: 14 }} /></IconButton>
+          <IconButton size="small" onClick={() => onCountChange(index, count - 1)} sx={{ border: '1px solid', borderColor: BORDER, borderRadius: 0.5, width: 22, height: 22 }}><RemoveIcon sx={{ fontSize: 14 }} /></IconButton>
+          <TextField size="small" value={count || ''} onChange={(event) => onCountChange(index, Number(event.target.value) || 0)} sx={{ width: 54, '& input': { textAlign: 'center', p: 0.45, fontSize: 12 } }} />
+          <IconButton size="small" onClick={() => onCountChange(index, count + 1)} sx={{ border: '1px solid', borderColor: BORDER, borderRadius: 0.5, width: 22, height: 22 }}><AddIcon sx={{ fontSize: 14 }} /></IconButton>
           <Typography variant="caption" color="text.disabled">{'›'.repeat(62)}</Typography>
         </Box>
       </TableCell>
-      <TableCell align="right" sx={{ color: index === 0 ? BLUE : 'text.secondary', fontWeight: 800 }}>{index === 0 ? '¥100,000' : '¥0'}</TableCell>
+      <TableCell align="right" sx={{ color: count > 0 ? BLUE : 'text.secondary', fontWeight: 800 }}>{formatYen(count * denominationValues[index])}</TableCell>
     </TableRow>
   )
 }
 
-function RegisterConfirmedSide() {
+function RegisterConfirmedSide({ total }: { total: number }) {
   const { t } = useTranslation()
 
-  return <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}><PayCard title={t('page.front.safeCash')}><SummaryLine label={t('page.front.cashReserve')} value="¥000,000,000" /><SummaryLine label={t('page.front.cashDifference')} value="¥000,000,000" blue /></PayCard><PayCard title={t('page.front.registerCash')}><SummaryLine label={t('page.front.cashReserve')} value="¥000,000,000" /><SummaryLine label={t('page.front.cashDifference')} value="¥000,000,000" danger /></PayCard><Box sx={{ flex: 1 }} /><PayCard title={t('page.front.totalAmount')}><SummaryLine label="" value="¥0" blue large /></PayCard></Box>
+  return <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}><PayCard title={t('page.front.safeCash')}><SummaryLine label={t('page.front.cashReserve')} value={formatYen(total)} /><SummaryLine label={t('page.front.cashDifference')} value="¥0" blue /></PayCard><PayCard title={t('page.front.registerCash')}><SummaryLine label={t('page.front.cashReserve')} value={formatYen(total)} /><SummaryLine label={t('page.front.cashDifference')} value="¥0" danger /></PayCard><Box sx={{ flex: 1 }} /><PayCard title={t('page.front.totalAmount')}><SummaryLine label="" value={formatYen(total)} blue large /></PayCard></Box>
 }
 
 function ReceiptOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
