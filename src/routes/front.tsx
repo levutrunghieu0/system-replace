@@ -130,11 +130,14 @@ function FrontPage() {
       .filter((item) => item.qty > 0))
     resetPayments()
   }
-  const completePayment = (method: PayMethod) => {
+  const completePayment = (method: PayMethod, amount?: number) => {
     setPayments((currentPayments) => {
       const currentPaidTotal = currentPayments.credit + currentPayments.barcode + currentPayments.emoney + currentPayments.cash
       const currentBalance = Math.max(paymentTotal - currentPaidTotal, 0)
-      return currentBalance === 0 ? currentPayments : { ...currentPayments, [method]: currentPayments[method] + currentBalance }
+      const requestedAmount = amount ?? currentBalance
+      const appliedAmount = method === 'cash' ? requestedAmount : Math.min(requestedAmount, currentBalance)
+
+      return currentBalance === 0 || appliedAmount <= 0 ? currentPayments : { ...currentPayments, [method]: currentPayments[method] + appliedAmount }
     })
   }
   const resetFlow = () => {
@@ -206,7 +209,7 @@ function FrontPage() {
           onScanValueChange={setScanValue}
         />
       )}
-      {mode === 'payment' && <PaymentWorkspace cartItems={cartItems} payments={payments} total={paymentTotal} balance={paymentBalance} onOpenDialog={setDialog} onCashPayment={() => completePayment('cash')} onEMoneyPayment={() => { completePayment('emoney'); setDialog('paymentComplete') }} />}
+      {mode === 'payment' && <PaymentWorkspace cartItems={cartItems} payments={payments} total={paymentTotal} balance={paymentBalance} onOpenDialog={setDialog} onCashPayment={(amount) => completePayment('cash', amount)} onEMoneyPayment={() => { completePayment('emoney'); setDialog('paymentComplete') }} />}
       {(mode === 'register-count' || mode === 'register-confirmed') && <RegisterCount confirmed={mode === 'register-confirmed'} counts={registerCounts} onCountChange={(index, nextCount) => setRegisterCounts((currentCounts) => currentCounts.map((count, countIndex) => countIndex === index ? Math.max(nextCount, 0) : count))} />}
       <PaymentDialogs dialog={dialog} total={paymentTotal} onClose={() => setDialog(null)} onDialog={setDialog} onCompletePayment={completePayment} />
       <ReceiptOverlay open={showReceipt} onClose={() => { setShowReceipt(false); setMode('register-count') }} />
@@ -355,8 +358,10 @@ function SaleDetail({ cartItems, selectedCoupon, onCouponChange }: { cartItems: 
   )
 }
 
-function PaymentWorkspace({ cartItems, payments, total, balance, onOpenDialog, onCashPayment, onEMoneyPayment }: { cartItems: CartItem[]; payments: PaymentState; total: number; balance: number; onOpenDialog: (dialog: DialogMode) => void; onCashPayment: () => void; onEMoneyPayment: () => void }) {
+function PaymentWorkspace({ cartItems, payments, total, balance, onOpenDialog, onCashPayment, onEMoneyPayment }: { cartItems: CartItem[]; payments: PaymentState; total: number; balance: number; onOpenDialog: (dialog: DialogMode) => void; onCashPayment: (amount: number) => void; onEMoneyPayment: () => void }) {
   const { t } = useTranslation()
+  const [cashAmount, setCashAmount] = useState('')
+  const displayCashAmount = cashAmount || String(balance)
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 292px', gap: 1 }}>
@@ -378,7 +383,7 @@ function PaymentWorkspace({ cartItems, payments, total, balance, onOpenDialog, o
           </Box>
           <Button onClick={onEMoneyPayment} sx={{ mt: 1, height: 36 }} variant="contained" fullWidth>{t('page.front.otherPay')}</Button>
         </PayCard>
-        <PayCard title={t('page.front.cashSettlement')}><TextField size="small" placeholder={t('page.front.amountInput')} value={formatYen(balance)} fullWidth /><Button onClick={onCashPayment} variant="contained" size="small" fullWidth sx={{ mt: 1 }}>{t('page.front.confirm')}</Button><SummaryLine label={t('page.front.change')} value="¥0" blue /></PayCard>
+        <PayCard title={t('page.front.cashSettlement')}><TextField size="small" placeholder={t('page.front.amountInput')} value={displayCashAmount} onChange={(event) => setCashAmount(event.target.value.replace(/[^0-9]/g, ''))} fullWidth /><Button onClick={() => { onCashPayment(Number(displayCashAmount)); setCashAmount('') }} variant="contained" size="small" fullWidth sx={{ mt: 1 }}>{t('page.front.confirm')}</Button><SummaryLine label={t('page.front.change')} value={formatYen(Math.max(payments.cash - total, 0))} blue /></PayCard>
       </Box>
     </Box>
   )
@@ -397,15 +402,21 @@ function PaymentBreakdown({ payments, balance }: { payments: PaymentState; balan
   return <Paper variant="outlined" sx={{ p: 1.4, borderColor: BORDER }}><Typography sx={{ fontWeight: 700, fontSize: 13 }}>{t('page.front.paymentBreakdown')}</Typography><SummaryLine label={t('page.front.cash')} value={formatYen(payments.cash)} /><SummaryLine label={t('page.front.credit')} value={formatYen(payments.credit)} /><SummaryLine label={t('page.front.barcodePay')} value={formatYen(payments.barcode)} /><SummaryLine label={t('page.front.eMoney')} value={formatYen(payments.emoney)} /><Divider sx={{ my: 0.8 }} /><SummaryLine label={t('page.front.balance')} value={formatYen(balance)} danger={balance > 0} blue={balance === 0} /></Paper>
 }
 
-function PaymentDialogs({ dialog, total, onClose, onDialog, onCompletePayment }: { dialog: DialogMode; total: number; onClose: () => void; onDialog: (dialog: DialogMode) => void; onCompletePayment: (method: PayMethod) => void }) {
+function PaymentDialogs({ dialog, total, onClose, onDialog, onCompletePayment }: { dialog: DialogMode; total: number; onClose: () => void; onDialog: (dialog: DialogMode) => void; onCompletePayment: (method: PayMethod, amount?: number) => void }) {
   const { t } = useTranslation()
+  const [selectedCard, setSelectedCard] = useState('VISA')
+  const [cardAmount, setCardAmount] = useState('')
+  const [barcodeAmount, setBarcodeAmount] = useState('')
+  const displayCardAmount = cardAmount || String(total)
+  const displayBarcodeAmount = barcodeAmount || String(total)
+  const cardBrands = ['VISA', 'Master', 'JCB', 'AMEX', 'Diners', 'UnionPay', 'Debit', 'Discover']
 
-  if (dialog === 'cardSelect') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => onDialog('cardAmount')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectCard')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, mt: 2 }}>{['VISA', 'Master', 'JCB', 'AMEX', 'Diners', 'UnionPay', 'Debit', 'Discover'].map((label, index) => <Button key={label} variant={index === 0 ? 'contained' : 'outlined'}>{label}</Button>)}</Box></CommonDialog>
-  if (dialog === 'cardAmount') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('credit'); onDialog('paymentComplete') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value={formatYen(total)} blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.cardAmount')} value={formatYen(total)} /></CommonDialog>
+  if (dialog === 'cardSelect') return <CommonDialog title={t('page.front.dialog.cardTitle')} onClose={onClose} onConfirm={() => onDialog('cardAmount')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectCard')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, mt: 2 }}>{cardBrands.map((label) => <Button key={label} onClick={() => setSelectedCard(label)} variant={selectedCard === label ? 'contained' : 'outlined'}>{label}</Button>)}</Box></CommonDialog>
+  if (dialog === 'cardAmount') return <CommonDialog title={`${t('page.front.dialog.cardTitle')} - ${selectedCard}`} onClose={onClose} onConfirm={() => { onCompletePayment('credit', Number(displayCardAmount)); setCardAmount(''); onDialog('paymentComplete') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value={formatYen(total)} blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.cardAmount')} value={displayCardAmount} onChange={(event) => setCardAmount(event.target.value.replace(/[^0-9]/g, ''))} /></CommonDialog>
   if (dialog === 'paymentComplete') return <CommonDialog icon={<CheckIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.terminalComplete')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.done')}><Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>{['icWith', 'icWithout', 'authCard', 'cancelDeal'].map((key) => <Card key={key} variant="outlined" sx={{ p: 2, bgcolor: '#f1f3f5' }}><Typography sx={{ fontWeight: 700 }}>{t(`page.front.dialog.${key}`)}</Typography><Typography variant="caption">{t('page.front.dialog.terminalGuide')}</Typography></Card>)}</Box></CommonDialog>
   if (dialog === 'installment') return <CommonDialog title={t('page.front.dialog.installmentTitle')} onClose={onClose} onConfirm={() => onDialog('cardProcessing')} confirm={t('page.front.done')}><Typography variant="body2">{t('page.front.dialog.selectInstallment')}</Typography><Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 1, mt: 2 }}>{['1回', '3回', '5回', '12回', 'リボ払い'].map((label, index) => <Button key={`${label}-${index}`} variant={index === 0 ? 'contained' : 'outlined'}>{label}</Button>)}</Box></CommonDialog>
-  if (dialog === 'cardProcessing') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.cardProcessing')} onClose={onClose} onConfirm={() => { onCompletePayment('credit'); onClose() }} confirm={t('page.front.done')}><Typography align="center" sx={{ fontWeight: 700 }}>{t('page.front.dialog.terminalInput')}</Typography><LinearProgress sx={{ my: 2 }} /><Typography variant="caption" display="block" align="center">{t('page.front.dialog.terminalGuide')}</Typography></CommonDialog>
-  if (dialog === 'barcodeAmount') return <CommonDialog title={t('page.front.dialog.barcodeTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('barcode'); onDialog('barcodeScan') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value={formatYen(total)} blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.barcodeAmount')} value={formatYen(total)} /></CommonDialog>
+  if (dialog === 'cardProcessing') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.cardProcessing')} onClose={onClose} onConfirm={() => { onCompletePayment('credit', Number(displayCardAmount)); setCardAmount(''); onClose() }} confirm={t('page.front.done')}><Typography align="center" sx={{ fontWeight: 700 }}>{t('page.front.dialog.terminalInput')}</Typography><LinearProgress sx={{ my: 2 }} /><Typography variant="caption" display="block" align="center">{t('page.front.dialog.terminalGuide')}</Typography></CommonDialog>
+  if (dialog === 'barcodeAmount') return <CommonDialog title={t('page.front.dialog.barcodeTitle')} onClose={onClose} onConfirm={() => { onCompletePayment('barcode', Number(displayBarcodeAmount)); setBarcodeAmount(''); onDialog('barcodeScan') }} confirm={t('page.front.confirm')}><SummaryLine label={t('page.front.totalAmount')} value={formatYen(total)} blue large /><TextField sx={{ mt: 2 }} size="small" fullWidth label={t('page.front.dialog.barcodeAmount')} value={displayBarcodeAmount} onChange={(event) => setBarcodeAmount(event.target.value.replace(/[^0-9]/g, ''))} /></CommonDialog>
   if (dialog === 'barcodeScan') return <CommonDialog icon={<InfoOutlinedIcon sx={{ fontSize: 56 }} />} title={t('page.front.dialog.scanCustomerBarcode')} onClose={onClose} onConfirm={onClose} confirm={t('page.front.done')} />
   return null
 }
