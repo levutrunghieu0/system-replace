@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
@@ -8,6 +8,8 @@ import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
+import Switch from '@mui/material/Switch'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import ViewWeekIcon from '@mui/icons-material/ViewWeek'
 import InputAdornment from '@mui/material/InputAdornment'
 import IconButton from '@mui/material/IconButton'
@@ -16,18 +18,29 @@ import { useTranslation } from 'react-i18next'
 import { csvPurchaseApi } from '../api/csvPurchaseApi'
 import type { Employee } from '../types'
 
+const DEMO_EMPLOYEE: Employee = { code: 'DEMO', name: 'デモモード' }
+
 interface EmployeeGateProps {
-  children: (employee: Employee, onLogout: () => void) => ReactNode
+  children?: (employee: Employee, onLogout: () => void) => ReactNode
+  demoStorageKey?: string
+  onAuthenticated?: (employee: Employee) => void
 }
 
-export function EmployeeGate({ children }: EmployeeGateProps) {
+export function EmployeeGate({ children, demoStorageKey, onAuthenticated }: EmployeeGateProps) {
   const { t } = useTranslation()
   const [employee, setEmployee] = useState<Employee | null>(null)
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [demoMode, setDemoMode] = useState(() =>
+    demoStorageKey ? localStorage.getItem(demoStorageKey) === 'true' : false
+  )
 
   useEffect(() => {
+    if (demoMode) {
+      setEmployee(DEMO_EMPLOYEE)
+      return
+    }
     const saved = sessionStorage.getItem('tantousha')
     if (saved) {
       try {
@@ -36,7 +49,7 @@ export function EmployeeGate({ children }: EmployeeGateProps) {
         sessionStorage.removeItem('tantousha')
       }
     }
-  }, [])
+  }, [demoMode])
 
   const handleLogin = async (inputCode: string) => {
     if (!inputCode.trim()) return
@@ -74,8 +87,30 @@ export function EmployeeGate({ children }: EmployeeGateProps) {
     handleLogin('123456')
   }
 
+  const handleToggleDemo = (_: React.ChangeEvent<HTMLInputElement>, enabled: boolean) => {
+    if (!demoStorageKey) return
+    localStorage.setItem(demoStorageKey, String(enabled))
+    setDemoMode(enabled)
+    if (!enabled) {
+      sessionStorage.removeItem('tantousha')
+      setEmployee(null)
+      setCode('')
+      setError(null)
+    }
+  }
+
+  const onAuthenticatedRef = useRef(onAuthenticated)
+  onAuthenticatedRef.current = onAuthenticated
+
+  useEffect(() => {
+    if (employee && onAuthenticatedRef.current) {
+      onAuthenticatedRef.current(employee)
+    }
+  }, [employee])
+
   if (employee) {
-    return <>{children(employee, handleLogout)}</>
+    if (onAuthenticated) return null
+    return children ? <>{children(employee, handleLogout)}</> : null
   }
 
   return (
@@ -153,6 +188,17 @@ export function EmployeeGate({ children }: EmployeeGateProps) {
               {loading ? <CircularProgress size={24} color="inherit" /> : t('page.warehouse.csvPurchase.employeeGate.authLabel')}
             </Button>
           </Box>
+
+          {demoStorageKey && (
+            <Box sx={{ pt: 1.5, borderTop: '1px solid', borderColor: 'divider', display: 'flex', justifyContent: 'flex-end' }}>
+              <FormControlLabel
+                control={<Switch checked={demoMode} onChange={handleToggleDemo} size="small" color="warning" />}
+                label={<Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>デモモード</Typography>}
+                labelPlacement="start"
+                sx={{ mr: 0 }}
+              />
+            </Box>
+          )}
         </CardContent>
       </Card>
     </Box>

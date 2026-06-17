@@ -36,7 +36,7 @@ function HandySettingsPage() {
         variant: 'contained',
         color: 'success',
         startIcon: <PlayArrowIcon fontSize="small" />,
-        disabled: !handyDevice || !appSend,
+        disabled: !handyDevice,
         onClick: () => setConfirmDialog(true),
       },
     ],

@@ -56,9 +56,13 @@ export interface AppTableProps<TData> {
 
   getRowId?: (row: TData, index: number) => string
   onRowClick?: (row: TData) => void
+  getRowSx?: (row: TData) => SxProps<Theme>
 
   toolbarLeft?: ReactNode
   toolbarRight?: ReactNode
+
+  /** Rendered as the first <TableRow> inside <TableBody>, before data rows. */
+  topInputRow?: ReactNode
 
   dense?: boolean
   stickyHeader?: boolean

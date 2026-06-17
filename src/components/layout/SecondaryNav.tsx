@@ -5,7 +5,7 @@ import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import Typography from '@mui/material/Typography'
 import { useTranslation } from 'react-i18next'
-import { Link, useRouterState } from '@tanstack/react-router'
+import { useRouterState, useNavigate } from '@tanstack/react-router'
 import { primaryMenuItems } from '../../config/navigation'
 
 const SECONDARY_NAV_WIDTH = 200
@@ -18,11 +18,20 @@ interface SecondaryNavProps {
 export default function SecondaryNav({ activePrimaryKey, onNavigate }: SecondaryNavProps) {
   const { t } = useTranslation()
   const routerState = useRouterState()
+  const navigate = useNavigate()
   const currentPath = routerState.location.pathname
 
   const activeMenu = primaryMenuItems.find((m) => m.key === activePrimaryKey)
 
   if (!activeMenu) return null
+
+  const handleItemClick = (path: string) => {
+    if (onNavigate) {
+      onNavigate(path)
+    } else {
+      navigate({ to: path })
+    }
+  }
 
   return (
     <Box
@@ -69,46 +78,41 @@ export default function SecondaryNav({ activePrimaryKey, onNavigate }: Secondary
           const isActive = currentPath === item.path
 
           return (
-            <Link
+            <ListItemButton
               key={item.key}
-              to={item.path}
-              style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
-              onClick={() => onNavigate?.(item.path)}
+              selected={isActive}
+              onClick={() => handleItemClick(item.path)}
+              sx={{
+                py: 0.75,
+                px: 1.25,
+                mx: 0.5,
+                my: 0.25,
+                borderRadius: 1.5,
+                minHeight: 40,
+                '&.Mui-selected': {
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': { bgcolor: 'primary.dark' },
+                  '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
+                  '& .MuiListItemText-primary': { fontWeight: 700 },
+                },
+                '&:hover:not(.Mui-selected)': { bgcolor: 'action.hover' },
+              }}
             >
-              <ListItemButton
-                selected={isActive}
+              <ListItemIcon
                 sx={{
-                  py: 0.75,
-                  px: 1.25,
-                  mx: 0.5,
-                  my: 0.25,
-                  borderRadius: 1.5,
-                  minHeight: 40,
-                  '&.Mui-selected': {
-                    bgcolor: 'primary.main',
-                    color: 'primary.contrastText',
-                    '&:hover': { bgcolor: 'primary.dark' },
-                    '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
-                    '& .MuiListItemText-primary': { fontWeight: 700 },
-                  },
-                  '&:hover:not(.Mui-selected)': { bgcolor: 'action.hover' },
+                  minWidth: 30,
+                  color: isActive ? 'primary.contrastText' : 'text.secondary',
+                  '& svg': { fontSize: '1.1rem' },
                 }}
               >
-                <ListItemIcon
-                  sx={{
-                    minWidth: 30,
-                    color: isActive ? 'primary.contrastText' : 'text.secondary',
-                    '& svg': { fontSize: '1.1rem' },
-                  }}
-                >
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText
-                  primary={t(item.labelKey as Parameters<typeof t>[0])}
-                  slotProps={{ primary: { style: { fontSize: '0.8rem', lineHeight: 1.3 } } }}
-                />
-              </ListItemButton>
-            </Link>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={t(item.labelKey as Parameters<typeof t>[0])}
+                slotProps={{ primary: { style: { fontSize: '0.8rem', lineHeight: 1.3 } } }}
+              />
+            </ListItemButton>
           )
         })}
       </List>

@@ -36,6 +36,7 @@ function PriceCell({ rowIndex, price, registrationDate, onPriceChange }: {
   registrationDate?: string
   onPriceChange: (rowIndex: number, newPrice: number) => void
 }) {
+  const { t } = useTranslation()
   const [inputVal, setInputVal] = useState(String(price))
 
   useEffect(() => {
@@ -60,7 +61,7 @@ function PriceCell({ rowIndex, price, registrationDate, onPriceChange }: {
       />
       {registrationDate && (
         <Typography sx={{ fontSize: '0.65rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
-          最終更新日 {registrationDate}
+          {t('page.warehouse.csvPurchase.workspace.column.lastModified')} {registrationDate}
         </Typography>
       )}
     </Box>
@@ -70,6 +71,7 @@ function PriceCell({ rowIndex, price, registrationDate, onPriceChange }: {
 export const Route = createFileRoute('/warehouse/csv-purchase')({
   validateSearch: (search: Record<string, unknown>) => ({
     skipToFile: search.skipToFile === true,
+    correction: search.correction === true,
     partnerCode: typeof search.partnerCode === 'string' ? search.partnerCode : undefined,
     partnerName: typeof search.partnerName === 'string' ? search.partnerName : undefined,
   }),
@@ -93,7 +95,7 @@ type ScreenFlowState =
 function CsvPurchasePage() {
   const router = useRouter()
   const { t } = useTranslation()
-  const { skipToFile, partnerCode: prefillCode, partnerName: prefillName } = Route.useSearch()
+  const { skipToFile, correction, partnerCode: prefillCode, partnerName: prefillName } = Route.useSearch()
 
   const prefillPartner = skipToFile && prefillCode && prefillName
     ? { code: prefillCode, name: prefillName }
@@ -101,7 +103,13 @@ function CsvPurchasePage() {
 
   const [flowState, setFlowState] = useState<ScreenFlowState>(prefillPartner ? 'file_select' : 'partner_select')
   const [partner, setPartner] = useState<Partner | null>(prefillPartner)
-  
+  const [badFileName, setBadFileName] = useState<string | undefined>(undefined)
+  const [labelIssue, setLabelIssue] = useState(false)
+  // 仕入修正 mode: the original slip is already cancelled, so the flow
+  // must not be abandoned until the new slip is registered (wireframe: 終了不可)
+  const [isCorrection, setIsCorrection] = useState(correction)
+  const [correctionGuardOpen, setCorrectionGuardOpen] = useState(false)
+
   const [slipNumber, setSlipNumber] = useState('')
   const [items, setItems] = useState<CsvPurchaseItem[]>([])
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -112,13 +120,18 @@ function CsvPurchasePage() {
   const totalAmount = useMemo(() => items.reduce((sum, item) => sum + item.price * item.quantity, 0), [items])
 
   // Handle flow navigations
-  const handlePartnerConfirm = (_selectedMode: 'csv' | 'reference', selectedPartner: Partner) => {
-    setPartner(selectedPartner)
-    setFlowState('file_select')
+  const handlePartnerConfirm = (selectedMode: 'csv' | 'reference', selectedPartner: Partner | null) => {
+    if (selectedMode === 'reference') {
+      router.navigate({ to: '/warehouse/csv-purchase-correction' })
+    } else if (selectedPartner) {
+      setPartner(selectedPartner)
+      setFlowState('file_select')
+    }
   }
 
-  const handleFileConfirm = (_fileName: string, parsedItems: CsvPurchaseItem[], isCorrupted: boolean) => {
+  const handleFileConfirm = (_fileName: string, parsedItems: CsvPurchaseItem[], isCorrupted: boolean, newBadFileName?: string) => {
     if (isCorrupted) {
+      setBadFileName(newBadFileName)
       setFlowState('parsing_error')
     } else {
       setItems(parsedItems)
@@ -145,8 +158,9 @@ function CsvPurchasePage() {
     setFlowState('invoice_verify')
   }
 
-  const handleInvoiceConfirm = async (slipAmount: number) => {
+  const handleInvoiceConfirm = async (slipAmount: number, issueLabel: boolean) => {
     setRegistering(true)
+    setLabelIssue(issueLabel)
     try {
       await csvPurchaseApi.registerCsvPurchase(
         {
@@ -157,9 +171,11 @@ function CsvPurchasePage() {
           totalAmount,
         },
         slipAmount,
-        false,
+        issueLabel,
       )
-      setFlowState('label_print')
+      // New slip registered → the correction (旧伝票取消 + 新規伝票作成) is complete
+      setIsCorrection(false)
+      setFlowState(issueLabel ? 'label_print' : 'post_print')
     } finally {
       setRegistering(false)
     }
@@ -194,7 +210,7 @@ function CsvPurchasePage() {
       return [
         {
           key: 'abort',
-          labelKey: 'action.cancel',
+          labelKey: 'action.abort',
           position: 'left' as const,
           variant: 'outlined' as const,
           color: 'inherit' as const,
@@ -219,7 +235,11 @@ function CsvPurchasePage() {
     title: t('page.warehouse.csvPurchase.title'),
     showBackButton: true,
     hideSecondaryNav: flowState === 'workspace_grid' || flowState === 'post_print',
-    onBack: flowState === 'workspace_grid' ? handleAbort : () => router.history.back(),
+    onBack: flowState === 'workspace_grid'
+      ? handleAbort
+      : isCorrection
+        ? () => setCorrectionGuardOpen(true)
+        : () => router.history.back(),
     actions: layoutActions,
   })
 
@@ -257,7 +277,7 @@ function CsvPurchasePage() {
         header: t('page.warehouse.csvPurchase.workspace.column.type'),
         size: 90,
         cell: (info) => (
-          <Box sx={{ display: 'inline-block', bgcolor: 'warning.light', color: 'warning.contrastText', px: 1.5, py: 0.4, borderRadius: 2, fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <Box sx={{ display: 'inline-block', bgcolor: 'warning.light', color: 'warning.dark', px: 1.5, py: 0.4, borderRadius: 2, fontSize: '0.78rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
             {String(info.getValue())}
           </Box>
         ),
@@ -273,8 +293,8 @@ function CsvPurchasePage() {
             onChange={(e) => setItemStatus(info.row.index, e.target.value)}
             sx={{ fontSize: '0.8rem', '& .MuiSelect-select': { py: 0.5, px: 1 } }}
           >
-            {['新品', '未使用', '中古A', '中古B', '中古C'].map((s) => (
-              <MenuItem key={s} value={s} sx={{ fontSize: '0.8rem' }}>{s}</MenuItem>
+            {(Object.entries(t('page.warehouse.csvPurchase.workspace.statusOptions', { returnObjects: true })) as [string, string][]).map(([key, label]) => (
+              <MenuItem key={key} value={label} sx={{ fontSize: '0.8rem' }}>{label}</MenuItem>
             ))}
           </Select>
         ),
@@ -315,6 +335,19 @@ function CsvPurchasePage() {
           </Typography>
         ),
       },
+      {
+        id: 'purchaseAmount',
+        header: t('page.warehouse.csvPurchase.workspace.column.purchaseAmount'),
+        size: 120,
+        cell: (info) => {
+          const row = info.row.original
+          return (
+            <Typography variant="body2" sx={{ fontWeight: 700, textAlign: 'right' }}>
+              ¥{(row.price * row.quantity).toLocaleString()}
+            </Typography>
+          )
+        },
+      },
     ],
     [t, setItemStatus, setItemPrice]
   )
@@ -332,12 +365,19 @@ function CsvPurchasePage() {
       <CsvFileSelector
         open={flowState === 'file_select'}
         onConfirm={handleFileConfirm}
-        onCancel={() => setFlowState('partner_select')}
+        onCancel={() => {
+          if (isCorrection) {
+            setCorrectionGuardOpen(true)
+          } else {
+            setFlowState('partner_select')
+          }
+        }}
       />
 
       <InvoiceVerificationModal
         open={flowState === 'invoice_verify'}
         totalAmount={totalAmount}
+        slipNumber={slipNumber}
         onConfirm={handleInvoiceConfirm}
         onCancel={() => setFlowState('workspace_grid')}
         submitting={registering}
@@ -346,6 +386,7 @@ function CsvPurchasePage() {
       <LabelPrintingDialog
         open={flowState === 'label_print'}
         onClose={handleLabelPrintClose}
+        skipPrompt={labelIssue}
       />
 
       <RoutingOptionsDialog
@@ -353,6 +394,33 @@ function CsvPurchasePage() {
         onContinue={handleContinueFlow}
         onReturn={handleReturnToTop}
       />
+
+      {/* 仕入修正 guard — original slip already cancelled, exit is not allowed (終了不可) */}
+      <Dialog
+        open={correctionGuardOpen}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{ paper: { sx: { borderRadius: 3, p: 1 } } }}
+      >
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, textAlign: 'center', pt: 3 }}>
+          <WarningAmberIcon color="warning" sx={{ fontSize: 56 }} />
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+            {t('page.warehouse.csvPurchase.correctionGuard.title')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {t('page.warehouse.csvPurchase.correctionGuard.message')}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5, gap: 1.5, justifyContent: 'center' }}>
+          <Button
+            variant="contained"
+            onClick={() => setCorrectionGuardOpen(false)}
+            sx={{ textTransform: 'none', px: 4, fontWeight: 700 }}
+          >
+            {t('page.warehouse.csvPurchase.correctionGuard.continue')}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Ingestion Parser Error Modal */}
       <Dialog
@@ -369,15 +437,19 @@ function CsvPurchasePage() {
           <Typography variant="body2" color="text.secondary">
             {t('page.warehouse.csvPurchase.ingestionError.subtitle')}
           </Typography>
+          {badFileName && (
+            <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: 'grey.100', px: 1.5, py: 0.5, borderRadius: 1, color: 'error.main' }}>
+              {badFileName}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2.5, gap: 1.5, justifyContent: 'center' }}>
           <Button
             variant="contained"
-            color="error"
-            onClick={() => router.navigate({ to: '/' })}
+            onClick={() => setFlowState('file_select')}
             sx={{ textTransform: 'none', px: 4, fontWeight: 700 }}
           >
-            {t('page.warehouse.csvPurchase.ingestionError.returnToTop')}
+            OK
           </Button>
         </DialogActions>
       </Dialog>
@@ -385,6 +457,13 @@ function CsvPurchasePage() {
       {/* Main Workspace Grid (Parsed CSV Rows) — also visible during post_print to show items clearing (pages 15-16) */}
       {(flowState === 'workspace_grid' || flowState === 'post_print') && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
+          {/* 仕入修正: re-imported product codes only update quantity (Store Manual STEP 12) */}
+          {isCorrection && (
+            <Alert severity="info" sx={{ py: 0.25 }}>
+              {t('page.warehouse.csvPurchase.workspace.correctionNotice')}
+            </Alert>
+          )}
+
           {/* Compact inline header bar */}
           <Paper variant="outlined" sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', flexWrap: 'wrap', bgcolor: 'background.paper', borderRadius: 1 }}>
             {[

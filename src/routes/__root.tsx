@@ -2,6 +2,7 @@ import { createRootRoute, Outlet } from '@tanstack/react-router'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import AppLayout from '../components/layout/AppLayout'
+import { AppSettingsProvider } from '../contexts/AppSettingsContext'
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -10,9 +11,11 @@ export const Route = createRootRoute({
 
 function RootLayout() {
   return (
-    <AppLayout>
-      <Outlet />
-    </AppLayout>
+    <AppSettingsProvider>
+      <AppLayout>
+        <Outlet />
+      </AppLayout>
+    </AppSettingsProvider>
   )
 }
 

@@ -16,13 +16,14 @@ import type { CsvPurchaseItem } from '../types'
 
 interface CsvFileSelectorProps {
   open: boolean
-  onConfirm: (fileName: string, parsedItems: CsvPurchaseItem[], isCorrupted: boolean) => void
+  onConfirm: (fileName: string, parsedItems: CsvPurchaseItem[], isCorrupted: boolean, badFileName?: string) => void
   onCancel: () => void
 }
 
 interface MockFileOption {
   name: string
   isCorrupted: boolean
+  badFileName?: string
   items: CsvPurchaseItem[]
 }
 
@@ -47,6 +48,7 @@ const MOCK_FILES: MockFileOption[] = [
   {
     name: 'Corrupted_Item_Data.csv',
     isCorrupted: true,
+    badFileName: '20241007100059_Corrupted_Item_Data.bad',
     items: []
   }
 ]
@@ -58,7 +60,7 @@ export function CsvFileSelector({ open, onConfirm, onCancel }: CsvFileSelectorPr
   const handleExecute = () => {
     if (selectedFileIndex !== '') {
       const selected = MOCK_FILES[selectedFileIndex]
-      onConfirm(selected.name, selected.items, selected.isCorrupted)
+      onConfirm(selected.name, selected.items, selected.isCorrupted, selected.badFileName)
     }
   }
 

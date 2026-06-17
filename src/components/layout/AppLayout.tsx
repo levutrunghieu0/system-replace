@@ -3,11 +3,13 @@ import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import { useRouterState, useRouter } from '@tanstack/react-router'
 import { LayoutProvider, useLayoutContext } from '../../contexts/LayoutContext'
+import { useAppSettings } from '../../contexts/AppSettingsContext'
 import { primaryMenuItems } from '../../config/navigation'
 import PrimaryNav from './PrimaryNav'
 import SecondaryNav from './SecondaryNav'
 import AppHeader from './AppHeader'
 import ActionBar from './ActionBar'
+import { EmployeeGate } from '../../features/csv-purchase/components/EmployeeGate'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -39,7 +41,9 @@ function findPrimaryKeyByPath(pathname: string): string | null {
 function AppShell({ children }: AppLayoutProps) {
   const [activePrimaryKey, setActivePrimaryKey] = useState<string | null>(null)
   const [navOverride, setNavOverride] = useState(false)
+  const [pendingNavPath, setPendingNavPath] = useState<string | null>(null)
   const { forceHideSecondaryNav } = useLayoutContext()
+  const { employeeAuthEnabled } = useAppSettings()
 
   const router = useRouter()
 
@@ -50,15 +54,30 @@ function AppShell({ children }: AppLayoutProps) {
 
   // Reset override whenever forceHideSecondaryNav changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNavOverride(false)
   }, [forceHideSecondaryNav])
 
-  // Close Menu 2 only when navigating to a route that actually exists.
-  // If the path has no registered route (404), keep Menu 2 open so the user can navigate elsewhere.
   const handleSecondaryNavigate = (path: string) => {
-    if ((router.routesById as unknown as Record<string, unknown>)[path] !== undefined) {
-      setActivePrimaryKey(null)
+    if (employeeAuthEnabled) {
+      // Clear any previous session so auth is always required
+      sessionStorage.removeItem('tantousha')
+      setPendingNavPath(path)
+    } else {
+      router.navigate({ to: path as string })
+      if ((router.routesById as unknown as Record<string, unknown>)[path] !== undefined) {
+        setActivePrimaryKey(null)
+      }
     }
+  }
+
+  const handleAuthSuccess = () => {
+    if (!pendingNavPath) return
+    // Don't persist session — require auth on every secondary nav click
+    sessionStorage.removeItem('tantousha')
+    router.navigate({ to: pendingNavPath as string })
+    setActivePrimaryKey(null)
+    setPendingNavPath(null)
   }
 
   const handlePrimarySelect = (key: string) => {
@@ -165,9 +184,21 @@ function AppShell({ children }: AppLayoutProps) {
           <ActionBar />
         </Box>
       </Box>
-
-     
     </Box>
+
+    {/* Employee auth overlay — shown when any secondary nav item is clicked with auth enabled */}
+    {pendingNavPath && (
+      <Box
+        sx={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 1300,
+          bgcolor: 'background.default',
+        }}
+      >
+        <EmployeeGate onAuthenticated={handleAuthSuccess} />
+      </Box>
+    )}
   </Box>
 )
 }

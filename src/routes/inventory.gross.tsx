@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactElement } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import Box from '@mui/material/Box'
 import FormLabel from '@mui/material/FormLabel'
@@ -17,6 +17,16 @@ import CheckIcon from '@mui/icons-material/Check'
 import PrintIcon from '@mui/icons-material/Print'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
+import EditNoteIcon from '@mui/icons-material/EditNote'
+import TableChartIcon from '@mui/icons-material/TableChart'
+import LayersIcon from '@mui/icons-material/Layers'
+import Button from '@mui/material/Button'
+import Tooltip from '@mui/material/Tooltip'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
@@ -27,6 +37,7 @@ import { useLayoutConfig } from '../hooks/useLayoutConfig'
 import { AppTable, AppTableContainer } from '../components/table'
 import { QuantityStepper } from '../components/QuantityStepper'
 import AppModal from '../components/AppModal'
+import { generateJanCode, getShochukaWeek, generateGyosekiCode } from '../utils/janCode'
 
 export const Route = createFileRoute('/inventory/gross')({
   component: GrossInventoryPage,
@@ -106,6 +117,33 @@ const PRODUCTS_BATCH = [
   { code: '01109', name: 'レ_ライトアウター' },
 ]
 
+// ─── Tag data ─────────────────────────────────────────────────────────────────
+
+interface TagData {
+  productCode: string
+  shochukaWeek: string
+  productName: string
+  priceExTax: number
+  priceIncTax: number
+  janCode: string
+  gyosekiCode: string
+  printType: string
+}
+
+function makeTag(productCode: string, productName: string, priceExTax: number, printType = '縦長タグ'): TagData {
+  const janCode = generateJanCode()
+  return {
+    productCode,
+    shochukaWeek: getShochukaWeek(),
+    productName,
+    priceExTax,
+    priceIncTax: Math.round(priceExTax * 1.1),
+    janCode,
+    gyosekiCode: generateGyosekiCode(),
+    printType,
+  }
+}
+
 // ─── Config Modal ─────────────────────────────────────────────────────────────
 
 interface ConfigModalProps {
@@ -139,7 +177,10 @@ function ConfigModal({ open, onConfirm, onCancel }: ConfigModalProps) {
       dividers
       disableBackdropClose
       onCancel={onCancel}
-      onConfirm={() => onConfirm({ functionType, inputMethod, salesFloor, salesSubCategory, gender, sellingPrice, priceTypeFixed })}
+      onConfirm={() => onConfirm({
+        functionType, inputMethod, salesFloor, salesSubCategory, gender, sellingPrice,
+        priceTypeFixed: inputMethod === 'batch' ? '縦長タグ' : priceTypeFixed,
+      })}
       cancelLabel={t('page.inventory.gross.modal.cancel')}
       confirmLabel={t('page.inventory.gross.modal.run')}
     >
@@ -217,7 +258,7 @@ function ConfigModal({ open, onConfirm, onCancel }: ConfigModalProps) {
         {functionType !== 'history' && inputMethod === 'batch' && (
           <Box sx={{ ...rowSx, borderBottom: 'none' }}>
             <FormLabel sx={labelSx}>{t('page.inventory.gross.modal.priceTypeFixed')}</FormLabel>
-            <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>{priceTypeFixed}</Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>縦長タグ</Typography>
           </Box>
         )}
     </AppModal>
@@ -226,11 +267,22 @@ function ConfigModal({ open, onConfirm, onCancel }: ConfigModalProps) {
 
 // ─── Filter chips + counter (shared) ─────────────────────────────────────────
 
-function ConfigChips({ config, totalCount, isOverMax }: { config: ModalConfig; totalCount: number; isOverMax: boolean }) {
+function ConfigChips({ config, totalCount, isOverMax, onSwitchMode }: {
+  config: ModalConfig
+  totalCount: number
+  isOverMax: boolean
+  onSwitchMode?: () => void
+}) {
   const { t } = useTranslation()
   const genderLabel = config.gender === 'ladies'
     ? t('page.inventory.gross.modal.genderOpt.ladies')
     : t('page.inventory.gross.modal.genderOpt.mens')
+
+  const modeLabel = {
+    each: t('page.inventory.gross.modal.method.each'),
+    batch: t('page.inventory.gross.modal.method.batch'),
+    set: t('page.inventory.gross.modal.method.set'),
+  }[config.inputMethod]
 
   const chips = [
     config.salesFloor,
@@ -253,6 +305,18 @@ function ConfigChips({ config, totalCount, isOverMax }: { config: ModalConfig; t
         />
       ))}
       <Box sx={{ flex: 1 }} />
+      {onSwitchMode && (
+        <Tooltip title="入力方法を変更">
+          <Chip
+            icon={<SwapHorizIcon sx={{ fontSize: '0.72rem !important' }} />}
+            label={modeLabel}
+            size="small"
+            color="primary"
+            onClick={onSwitchMode}
+            sx={{ fontSize: '0.78rem', height: 26, fontWeight: 600 }}
+          />
+        </Tooltip>
+      )}
       <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.25 }}>
         <Typography sx={{ fontWeight: 700, fontSize: '1.05rem', color: isOverMax ? 'error.main' : 'text.primary', lineHeight: 1 }}>
           {totalCount}
@@ -268,21 +332,40 @@ function ConfigChips({ config, totalCount, isOverMax }: { config: ModalConfig; t
 const EACH_COLS = 4
 type EachRow = { products: Array<(typeof PRODUCTS_EACH)[0] | undefined> }
 
-function EachModeContent({ config, onBack }: { config: ModalConfig; onBack: () => void }) {
+function EachModeContent({ config, onBack, onSwitchMode }: { config: ModalConfig; onBack: () => void; onSwitchMode?: () => void }) {
   const { t } = useTranslation()
   const [quantities, setQuantities] = useState<Record<string, number>>({})
+  const [previewTags, setPreviewTags] = useState<TagData[] | null>(null)
   const [toast, setToast] = useState<{ open: boolean; severity: 'info' | 'error'; message: string }>({ open: false, severity: 'info', message: '' })
 
   const totalCount = Object.values(quantities).reduce((s, q) => s + q, 0)
   const isOverMax = totalCount > MAX_COUNT
 
+  const [printMemoOpen, setPrintMemoOpen] = useState(false)
+
   const handleReset = () => setQuantities({})
+
+  const buildTags = (printType: string) => {
+    const tags: TagData[] = []
+    for (const p of PRODUCTS_EACH) {
+      const qty = quantities[p.code] ?? 0
+      for (let i = 0; i < qty; i++) {
+        tags.push(makeTag(p.code, p.name, Number(config.sellingPrice), printType))
+      }
+    }
+    return tags
+  }
+
   const handleRun = () => {
     if (isOverMax) {
       setToast({ open: true, severity: 'error', message: t('page.inventory.gross.toast.overMax') })
       return
     }
-    setToast({ open: true, severity: 'info', message: t('page.inventory.gross.toast.printing') })
+    if (config.priceTypeFixed === 'なし') {
+      setPrintMemoOpen(true)
+    } else {
+      setPreviewTags(buildTags(config.priceTypeFixed))
+    }
   }
 
   useLayoutConfig({
@@ -355,7 +438,7 @@ function EachModeContent({ config, onBack }: { config: ModalConfig; onBack: () =
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
-      <ConfigChips config={config} totalCount={totalCount} isOverMax={isOverMax} />
+      <ConfigChips config={config} totalCount={totalCount} isOverMax={isOverMax} onSwitchMode={onSwitchMode} />
 
       <AppTable
         data={eachData}
@@ -364,6 +447,25 @@ function EachModeContent({ config, onBack }: { config: ModalConfig; onBack: () =
         dense
         stickyHeader
       />
+
+      {/* プライス種類 = なし → プライス選択 → TagPreview */}
+      <PrintMemoModal open={printMemoOpen} onClose={(executed, selectedType) => {
+        setPrintMemoOpen(false)
+        if (executed && selectedType) setPreviewTags(buildTags(selectedType))
+      }} />
+
+      {previewTags && (
+        <TagPreviewDialog
+          open
+          tags={previewTags}
+          onClose={() => setPreviewTags(null)}
+          onConfirm={() => {
+            const count = previewTags.length
+            setPreviewTags(null)
+            setToast({ open: true, severity: 'info', message: `${count}件 印刷実行中` })
+          }}
+        />
+      )}
 
       <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
         <Alert severity={toast.severity} onClose={() => setToast(p => ({ ...p, open: false }))} sx={{ width: '100%' }}>
@@ -376,7 +478,7 @@ function EachModeContent({ config, onBack }: { config: ModalConfig; onBack: () =
 
 // ─── Print Memo Modal ─────────────────────────────────────────────────────────
 
-function PrintMemoModal({ open, onClose }: { open: boolean; onClose: (executed?: boolean) => void }) {
+function PrintMemoModal({ open, onClose }: { open: boolean; onClose: (executed: boolean, printType?: string) => void }) {
   const [selected, setSelected] = useState(SET_PRINT_TYPES[0])
 
   return (
@@ -385,7 +487,7 @@ function PrintMemoModal({ open, onClose }: { open: boolean; onClose: (executed?:
       title="発行プライス選択"
       dividers
       onCancel={() => onClose(false)}
-      onConfirm={() => onClose(true)}
+      onConfirm={() => onClose(true, selected)}
     >
       <RadioGroup value={selected} onChange={e => setSelected(e.target.value)}>
         {SET_PRINT_TYPES.map(type => (
@@ -409,15 +511,366 @@ function PrintMemoModal({ open, onClose }: { open: boolean; onClose: (executed?:
   )
 }
 
+// ─── Mode Switch Modal ────────────────────────────────────────────────────────
+
+const MODE_SWITCH_OPTIONS: Array<{
+  value: InputMethod
+  icon: ReactElement
+  labelKey: string
+  desc: string
+}> = [
+  {
+    value: 'each',
+    icon: <EditNoteIcon sx={{ fontSize: '1.5rem' }} />,
+    labelKey: 'page.inventory.gross.modal.method.each',
+    desc: '大分類・性別・価格を固定し、中分類を1件ずつ付与',
+  },
+  {
+    value: 'batch',
+    icon: <TableChartIcon sx={{ fontSize: '1.5rem' }} />,
+    labelKey: 'page.inventory.gross.modal.method.batch',
+    desc: '価格×中分類の表から数量を一括入力',
+  },
+  {
+    value: 'set',
+    icon: <LayersIcon sx={{ fontSize: '1.5rem' }} />,
+    labelKey: 'page.inventory.gross.modal.method.set',
+    desc: 'セットアイテムの印刷種類別に枚数を入力',
+  },
+]
+
+function ModeSwitchModal({ open, current, onConfirm, onClose }: {
+  open: boolean
+  current: InputMethod
+  onConfirm: (method: InputMethod) => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const [selected, setSelected] = useState<InputMethod>(current)
+
+  return (
+    <AppModal
+      open={open}
+      title={t('page.inventory.gross.modal.inputMethod')}
+      maxWidth="sm"
+      dividers
+      onCancel={onClose}
+      onConfirm={() => onConfirm(selected)}
+    >
+      <Box sx={{ px: 2.5, py: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        {MODE_SWITCH_OPTIONS.map(opt => {
+          const isSelected = selected === opt.value
+          return (
+            <Box
+              key={opt.value}
+              onClick={() => setSelected(opt.value)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                px: 2,
+                py: 1.5,
+                border: '2px solid',
+                borderColor: isSelected ? 'primary.main' : 'divider',
+                borderRadius: 2,
+                bgcolor: isSelected ? 'rgba(25,118,210,0.06)' : 'background.paper',
+                cursor: 'pointer',
+                transition: 'border-color 0.12s, background-color 0.12s',
+                '&:hover': {
+                  borderColor: isSelected ? 'primary.main' : 'primary.light',
+                  bgcolor: isSelected ? 'rgba(25,118,210,0.06)' : 'action.hover',
+                },
+              }}
+            >
+              <Box sx={{ color: isSelected ? 'primary.main' : 'text.disabled', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                {opt.icon}
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography sx={{ fontSize: '0.9rem', fontWeight: isSelected ? 700 : 500, color: isSelected ? 'primary.main' : 'text.primary', lineHeight: 1.3 }}>
+                  {t(opt.labelKey as Parameters<typeof t>[0])}
+                </Typography>
+                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.3, lineHeight: 1.4 }}>
+                  {opt.desc}
+                </Typography>
+              </Box>
+              {isSelected && <CheckIcon sx={{ color: 'primary.main', fontSize: '1.1rem', flexShrink: 0 }} />}
+            </Box>
+          )
+        })}
+      </Box>
+    </AppModal>
+  )
+}
+
+// ─── Tag Preview ─────────────────────────────────────────────────────────────
+
+const BARCODE_H_BG = 'repeating-linear-gradient(90deg,#000 0px,#000 2px,#fff 2px,#fff 3px,#000 3px,#000 5px,#fff 5px,#fff 7px,#000 7px,#000 9px,#fff 9px,#fff 11px,#000 11px,#000 12px,#fff 12px,#fff 15px)'
+const BARCODE_V_BG = 'repeating-linear-gradient(180deg,#000 0px,#000 3px,#fff 3px,#fff 5px,#000 5px,#000 8px,#fff 8px,#fff 10px,#000 10px,#000 12px,#fff 12px,#fff 15px)'
+
+// Shared sub-components
+const TH = ({ tag }: { tag: TagData }) => (
+  <Box sx={{ display: 'flex', bgcolor: '#111', minHeight: 34 }}>
+    <Box sx={{ flex: 1, px: 1, py: 0.6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Typography sx={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#fff', letterSpacing: '0.06em' }}>{tag.productCode}</Typography>
+      <Typography sx={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#fff' }}>{tag.shochukaWeek}</Typography>
+    </Box>
+    <Box sx={{ width: 22, background: BARCODE_V_BG, flexShrink: 0 }} />
+  </Box>
+)
+const TH_WIDE = ({ tag }: { tag: TagData }) => (
+  <Box sx={{ display: 'flex', bgcolor: '#111', minHeight: 34 }}>
+    <Box sx={{ flex: 1, px: 1, py: 0.6, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Typography sx={{ fontSize: '0.68rem', fontFamily: 'monospace', color: '#fff' }}>{tag.productCode}</Typography>
+      <Typography sx={{ fontSize: '0.68rem', fontFamily: 'monospace', color: '#fff' }}>{tag.shochukaWeek}</Typography>
+      <Typography sx={{ fontSize: '0.68rem', fontFamily: 'monospace', color: '#fff', flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{tag.productName}</Typography>
+    </Box>
+    <Box sx={{ width: 22, background: BARCODE_V_BG, flexShrink: 0 }} />
+  </Box>
+)
+const SH = ({ tag }: { tag: TagData }) => (
+  <Box sx={{ bgcolor: '#111', px: 1, py: 0.5, display: 'flex', justifyContent: 'space-between' }}>
+    <Typography sx={{ fontSize: '0.65rem', fontFamily: 'monospace', color: '#fff' }}>{tag.productCode}</Typography>
+    <Typography sx={{ fontSize: '0.65rem', fontFamily: 'monospace', color: '#fff' }}>{tag.shochukaWeek}</Typography>
+  </Box>
+)
+const BF = ({ tag, h = 24 }: { tag: TagData; h?: number }) => (
+  <Box sx={{ borderTop: '1px solid #eee', px: 0.75, pt: 0.5, pb: 0.75 }}>
+    <Box sx={{ width: '100%', height: h, background: BARCODE_H_BG, mb: 0.3 }} />
+    <Typography sx={{ fontSize: '0.5rem', fontFamily: 'monospace', lineHeight: 1.5 }}>{tag.janCode}</Typography>
+    <Typography sx={{ fontSize: '0.5rem', fontFamily: 'monospace', lineHeight: 1.5 }}>{tag.janCode.slice(0, 6)}/  {tag.productName}/</Typography>
+    <Typography sx={{ fontSize: '0.5rem', fontFamily: 'monospace', lineHeight: 1.5 }}>{tag.gyosekiCode}</Typography>
+  </Box>
+)
+const PriceBlock = ({ tag, big }: { tag: TagData; big?: boolean }) => (
+  <>
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 0.1 }}>
+      <Typography sx={{ fontSize: '0.56rem', color: '#555' }}>税抜</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.2 }}>
+        <Typography sx={{ fontSize: big ? '1.45rem' : '1.05rem', fontWeight: 800, lineHeight: 1 }}>{tag.priceExTax.toLocaleString()}</Typography>
+        <Typography sx={{ fontSize: big ? '0.75rem' : '0.62rem', fontWeight: 700 }}>円</Typography>
+      </Box>
+    </Box>
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: 0.4 }}>
+      <Typography sx={{ fontSize: '0.56rem', color: '#555' }}>税込</Typography>
+      <Typography sx={{ fontSize: big ? '0.72rem' : '0.65rem', fontWeight: big ? 600 : 400 }}>{tag.priceIncTax.toLocaleString()}円</Typography>
+    </Box>
+  </>
+)
+
+// ── 縦長タグ ──────────────────────────────────────────────────────────────────
+function TagVerticalLong({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 172, border: '1px solid #ccc', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', borderRadius: 0.5, flexShrink: 0 }}>
+      <TH tag={tag} />
+      <Box sx={{ display: 'flex' }}>
+        <Box sx={{ flex: 1, px: 1, pt: 0.75, pb: 0.5 }}>
+          <Typography sx={{ fontSize: '0.56rem', color: '#888', mb: 0.2 }}>SIZE</Typography>
+          <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, mb: 0.75, lineHeight: 1.3 }}>{tag.productName}</Typography>
+          <PriceBlock tag={tag} />
+        </Box>
+        <Box sx={{ width: 22, background: BARCODE_V_BG, flexShrink: 0 }} />
+      </Box>
+      <BF tag={tag} />
+    </Box>
+  )
+}
+
+// ── 横長タグ ──────────────────────────────────────────────────────────────────
+function TagHorizontalLong({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 270, border: '1px solid #ccc', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.12)', borderRadius: 0.5, flexShrink: 0 }}>
+      <TH_WIDE tag={tag} />
+      <Box sx={{ display: 'flex' }}>
+        <Box sx={{ flex: 1, px: 1.5, py: 0.75, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ flexShrink: 0 }}>
+            <Typography sx={{ fontSize: '0.56rem', color: '#888', mb: 0.2 }}>SIZE</Typography>
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700 }}>{tag.productName}</Typography>
+          </Box>
+          <Box sx={{ flex: 1 }} />
+          <Box sx={{ textAlign: 'right' }}><PriceBlock tag={tag} /></Box>
+        </Box>
+        <Box sx={{ width: 22, background: BARCODE_V_BG, flexShrink: 0 }} />
+      </Box>
+      <BF tag={tag} h={20} />
+    </Box>
+  )
+}
+
+// ── 縦長シール ────────────────────────────────────────────────────────────────
+function StickerVerticalLong({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 148, border: '1px dashed #aaa', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', borderRadius: 2, flexShrink: 0 }}>
+      <SH tag={tag} />
+      <Box sx={{ px: 1, py: 0.75 }}>
+        <Typography sx={{ fontSize: '0.56rem', color: '#888', mb: 0.2 }}>SIZE</Typography>
+        <Typography sx={{ fontSize: '0.66rem', fontWeight: 700, mb: 0.75, lineHeight: 1.3 }}>{tag.productName}</Typography>
+        <PriceBlock tag={tag} />
+      </Box>
+      <Box sx={{ px: 0.75, pb: 0.75 }}>
+        <Box sx={{ width: '100%', height: 20, background: BARCODE_H_BG, mb: 0.3 }} />
+        <Typography sx={{ fontSize: '0.48rem', fontFamily: 'monospace' }}>{tag.janCode}  {tag.gyosekiCode}</Typography>
+      </Box>
+    </Box>
+  )
+}
+
+// ── 横長シール ────────────────────────────────────────────────────────────────
+function StickerHorizontalLong({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 258, border: '1px dashed #aaa', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', borderRadius: 2, flexShrink: 0 }}>
+      <Box sx={{ bgcolor: '#111', px: 1, py: 0.45, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography sx={{ fontSize: '0.62rem', fontFamily: 'monospace', color: '#fff' }}>{tag.productCode}</Typography>
+        <Typography sx={{ fontSize: '0.62rem', fontFamily: 'monospace', color: '#fff' }}>{tag.shochukaWeek}</Typography>
+        <Typography sx={{ fontSize: '0.62rem', fontFamily: 'monospace', color: '#fff', flex: 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{tag.productName}</Typography>
+      </Box>
+      <Box sx={{ px: 1, py: 0.75, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ flex: 1 }}><PriceBlock tag={tag} /></Box>
+        <Box sx={{ width: 80, flexShrink: 0 }}>
+          <Box sx={{ width: '100%', height: 28, background: BARCODE_H_BG, mb: 0.3 }} />
+          <Typography sx={{ fontSize: '0.45rem', fontFamily: 'monospace' }}>{tag.janCode}</Typography>
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
+// ── 縦長ショーケースタグ ──────────────────────────────────────────────────────
+function TagVerticalShowcase({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 172, border: '2px solid #333', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 3px 12px rgba(0,0,0,0.18)', borderRadius: 0.5, flexShrink: 0 }}>
+      <TH tag={tag} />
+      <Box sx={{ display: 'flex' }}>
+        <Box sx={{ flex: 1, px: 1, pt: 0.75, pb: 0.5 }}>
+          <Typography sx={{ fontSize: '0.56rem', color: '#888', mb: 0.2 }}>SIZE</Typography>
+          <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, mb: 1, lineHeight: 1.3 }}>{tag.productName}</Typography>
+          <PriceBlock tag={tag} big />
+        </Box>
+        <Box sx={{ width: 22, background: BARCODE_V_BG, flexShrink: 0 }} />
+      </Box>
+      <BF tag={tag} />
+    </Box>
+  )
+}
+
+// ── 横長ショーケースタグ ──────────────────────────────────────────────────────
+function TagHorizontalShowcase({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 270, border: '2px solid #333', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 3px 12px rgba(0,0,0,0.18)', borderRadius: 0.5, flexShrink: 0 }}>
+      <TH_WIDE tag={tag} />
+      <Box sx={{ display: 'flex' }}>
+        <Box sx={{ flex: 1, px: 1.5, py: 0.75, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ flexShrink: 0 }}>
+            <Typography sx={{ fontSize: '0.56rem', color: '#888', mb: 0.2 }}>SIZE</Typography>
+            <Typography sx={{ fontSize: '0.68rem', fontWeight: 700 }}>{tag.productName}</Typography>
+          </Box>
+          <Box sx={{ flex: 1 }} />
+          <Box sx={{ textAlign: 'right' }}><PriceBlock tag={tag} big /></Box>
+        </Box>
+        <Box sx={{ width: 22, background: BARCODE_V_BG, flexShrink: 0 }} />
+      </Box>
+      <BF tag={tag} h={20} />
+    </Box>
+  )
+}
+
+// ── 縦長ショーケースシール ────────────────────────────────────────────────────
+function StickerVerticalShowcase({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 148, border: '2px solid #333', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.1)', borderRadius: 2, flexShrink: 0 }}>
+      <SH tag={tag} />
+      <Box sx={{ px: 1, py: 1, textAlign: 'center' }}>
+        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, mb: 1.5, lineHeight: 1.3 }}>{tag.productName}</Typography>
+        <Typography sx={{ fontSize: '0.56rem', color: '#555', mb: 0.5 }}>税抜</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 0.25, mb: 1 }}>
+          <Typography sx={{ fontSize: '1.7rem', fontWeight: 900, lineHeight: 1 }}>{tag.priceExTax.toLocaleString()}</Typography>
+          <Typography sx={{ fontSize: '0.9rem', fontWeight: 700 }}>円</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'baseline', gap: 0.5 }}>
+          <Typography sx={{ fontSize: '0.58rem', color: '#555' }}>税込</Typography>
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{tag.priceIncTax.toLocaleString()}円</Typography>
+        </Box>
+      </Box>
+    </Box>
+  )
+}
+
+// ── 横短シール ────────────────────────────────────────────────────────────────
+function StickerHorizontalShort({ tag }: { tag: TagData }) {
+  return (
+    <Box sx={{ width: 230, border: '1px dashed #aaa', bgcolor: '#fff', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', borderRadius: 2, flexShrink: 0 }}>
+      <Box sx={{ px: 1.25, py: 0.6, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography sx={{ fontSize: '0.6rem', fontFamily: 'monospace', color: '#888' }}>{tag.productCode}</Typography>
+        <Box sx={{ flex: 1 }} />
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4 }}>
+          <Typography sx={{ fontSize: '0.56rem', color: '#555' }}>税抜</Typography>
+          <Typography sx={{ fontSize: '1rem', fontWeight: 800 }}>{tag.priceExTax.toLocaleString()}</Typography>
+          <Typography sx={{ fontSize: '0.6rem' }}>円</Typography>
+        </Box>
+        <Typography sx={{ fontSize: '0.6rem', color: '#bbb' }}>｜</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.4 }}>
+          <Typography sx={{ fontSize: '0.56rem', color: '#555' }}>税込</Typography>
+          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{tag.priceIncTax.toLocaleString()}</Typography>
+          <Typography sx={{ fontSize: '0.6rem' }}>円</Typography>
+        </Box>
+      </Box>
+      <Box sx={{ px: 1.25, pb: 0.6, display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={{ width: 70, height: 16, background: BARCODE_H_BG, flexShrink: 0 }} />
+        <Typography sx={{ fontSize: '0.45rem', fontFamily: 'monospace', color: '#999', overflow: 'hidden', whiteSpace: 'nowrap' }}>{tag.janCode}</Typography>
+      </Box>
+    </Box>
+  )
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────
+function TagPreviewCard({ tag }: { tag: TagData }) {
+  switch (tag.printType) {
+    case '横長タグ':             return <TagHorizontalLong tag={tag} />
+    case '縦長シール':           return <StickerVerticalLong tag={tag} />
+    case '横長シール':           return <StickerHorizontalLong tag={tag} />
+    case '縦長ショーケースタグ': return <TagVerticalShowcase tag={tag} />
+    case '横長ショーケースタグ': return <TagHorizontalShowcase tag={tag} />
+    case '縦長ショーケースシール': return <StickerVerticalShowcase tag={tag} />
+    case '横短シール':           return <StickerHorizontalShort tag={tag} />
+    default:                     return <TagVerticalLong tag={tag} />
+  }
+}
+
+function TagPreviewDialog({ open, tags, onClose, onConfirm }: {
+  open: boolean
+  tags: TagData[]
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ fontSize: '0.95rem', fontWeight: 700, pb: 1 }}>
+        印刷プレビュー — {tags.length}件
+      </DialogTitle>
+      <DialogContent dividers sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+          {tags.map((tag, i) => <TagPreviewCard key={i} tag={tag} />)}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 1.5, gap: 1 }}>
+        <Button variant="outlined" color="inherit" onClick={onClose} sx={{ textTransform: 'none' }}>
+          キャンセル
+        </Button>
+        <Button variant="contained" color="success" startIcon={<PlayArrowIcon fontSize="small" />} onClick={onConfirm} sx={{ textTransform: 'none', fontWeight: 700 }}>
+          {tags.length}件 実行
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 // ─── Batch Mode (まとめ) ──────────────────────────────────────────────────────
 
 type BatchProduct = (typeof PRODUCTS_BATCH)[0]
 
-function BatchModeContent({ config, onBack }: { config: ModalConfig; onBack: () => void }) {
+function BatchModeContent({ config, onBack, onSwitchMode }: { config: ModalConfig; onBack: () => void; onSwitchMode?: () => void }) {
   const { t } = useTranslation()
   const [quantities, setQuantities] = useState<Record<string, Record<number, number>>>({})
-  const [printMemoOpen, setPrintMemoOpen] = useState(false)
-  const [toast, setToast] = useState<{ open: boolean; severity: 'info' | 'error'; message: string }>({ open: false, severity: 'info', message: '' })
+  const [toast, setToast] = useState<{ open: boolean; severity: 'info' | 'error' | 'success'; message: string }>({ open: false, severity: 'info', message: '' })
 
   const totalCount = Object.values(quantities).reduce(
     (s, pm) => s + Object.values(pm).reduce((ss, q) => ss + q, 0), 0
@@ -432,13 +885,28 @@ function BatchModeContent({ config, onBack }: { config: ModalConfig; onBack: () 
     setQuantities(prev => ({ ...prev, [code]: { ...(prev[code] ?? {}), [price]: v } }))
   }
 
+  const [previewTags, setPreviewTags] = useState<TagData[] | null>(null)
+
   const handleReset = () => setQuantities({})
   const handleRun = () => {
     if (isOverMax) { setToast({ open: true, severity: 'error', message: t('page.inventory.gross.toast.overMax') }); return }
-    setPrintMemoOpen(true)
+    const tags: TagData[] = []
+    for (const product of PRODUCTS_BATCH) {
+      for (const price of PRICE_COLUMNS) {
+        const qty = quantities[product.code]?.[price] ?? 0
+        for (let i = 0; i < qty; i++) {
+          tags.push(makeTag(product.code, product.name, price, '縦長タグ'))
+        }
+      }
+    }
+    setPreviewTags(tags)
   }
   const handlePrintMemo = () => {
-    setToast({ open: true, severity: 'info', message: t('page.inventory.gross.toast.printing') })
+    setToast({
+      open: true,
+      severity: 'success',
+      message: 'メモ用紙の印刷を実行しました。デスクトップ不要で在庫登録にご活用ください。',
+    })
   }
 
   useLayoutConfig({
@@ -510,7 +978,7 @@ function BatchModeContent({ config, onBack }: { config: ModalConfig; onBack: () 
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, height: '100%' }}>
-      <ConfigChips config={config} totalCount={totalCount} isOverMax={isOverMax} />
+      <ConfigChips config={config} totalCount={totalCount} isOverMax={isOverMax} onSwitchMode={onSwitchMode} />
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 0.75, bgcolor: 'grey.900', borderRadius: 1 }}>
         <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'white' }}>
@@ -523,12 +991,20 @@ function BatchModeContent({ config, onBack }: { config: ModalConfig; onBack: () 
 
       <AppTable data={PRODUCTS_BATCH} columns={batchColumns} dense stickyHeader />
 
-      <PrintMemoModal open={printMemoOpen} onClose={(executed) => {
-        setPrintMemoOpen(false)
-        if (executed) setToast({ open: true, severity: 'info', message: t('page.inventory.gross.toast.printing') })
-      }} />
+      {previewTags && (
+        <TagPreviewDialog
+          open
+          tags={previewTags}
+          onClose={() => setPreviewTags(null)}
+          onConfirm={() => {
+            const count = previewTags.length
+            setPreviewTags(null)
+            setToast({ open: true, severity: 'info', message: `${count}件 印刷実行中` })
+          }}
+        />
+      )}
 
-      <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
+      <Snackbar open={toast.open} autoHideDuration={6000} onClose={() => setToast(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
         <Alert severity={toast.severity} onClose={() => setToast(p => ({ ...p, open: false }))} sx={{ width: '100%' }}>
           {toast.message}
         </Alert>
@@ -541,7 +1017,7 @@ function BatchModeContent({ config, onBack }: { config: ModalConfig; onBack: () 
 
 type PrintRow = { type: string }
 
-function SetModeContent({ config, onBack }: { config: ModalConfig; onBack: () => void }) {
+function SetModeContent({ config, onBack, onSwitchMode }: { config: ModalConfig; onBack: () => void; onSwitchMode?: () => void }) {
   const { t } = useTranslation()
   const [quantities, setQuantities] = useState<Record<string, number>>({})
   const [printMemoOpen, setPrintMemoOpen] = useState(false)
@@ -550,13 +1026,25 @@ function SetModeContent({ config, onBack }: { config: ModalConfig; onBack: () =>
   const totalCount = Object.values(quantities).reduce((s, q) => s + q, 0)
   const isOverMax = totalCount > MAX_COUNT
 
+  const [previewTags, setPreviewTags] = useState<TagData[] | null>(null)
+
   const handleReset = () => setQuantities({})
   const handleRun = () => {
     if (isOverMax) {
       setToast({ open: true, severity: 'error', message: t('page.inventory.gross.toast.overMax') })
       return
     }
-    setPrintMemoOpen(true)
+    const tags: TagData[] = []
+    const productCode = config.salesSubCategory.slice(0, 5)
+    const productName = config.salesSubCategory
+    const price = Number(config.sellingPrice)
+    for (const printType of SET_PRINT_TYPES) {
+      const qty = quantities[printType] ?? 0
+      for (let i = 0; i < qty; i++) {
+        tags.push(makeTag(productCode, productName, price, printType))
+      }
+    }
+    setPreviewTags(tags)
   }
 
   useLayoutConfig({
@@ -616,6 +1104,19 @@ function SetModeContent({ config, onBack }: { config: ModalConfig; onBack: () =>
             sx={{ fontSize: '0.78rem', height: 26 }}
           />
         ))}
+        <Box sx={{ flex: 1 }} />
+        {onSwitchMode && (
+          <Tooltip title="入力方法を変更">
+            <Chip
+              icon={<SwapHorizIcon sx={{ fontSize: '0.72rem !important' }} />}
+              label={t('page.inventory.gross.modal.method.set')}
+              size="small"
+              color="primary"
+              onClick={onSwitchMode}
+              sx={{ fontSize: '0.78rem', height: 26, fontWeight: 600 }}
+            />
+          </Tooltip>
+        )}
       </Box>
 
       <Box sx={{ display: 'inline-flex', alignSelf: 'flex-start', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.4, bgcolor: 'background.paper' }}>
@@ -630,6 +1131,19 @@ function SetModeContent({ config, onBack }: { config: ModalConfig; onBack: () =>
         setPrintMemoOpen(false)
         if (executed) setToast({ open: true, severity: 'info', message: t('page.inventory.gross.toast.printing') })
       }} />
+
+      {previewTags && (
+        <TagPreviewDialog
+          open
+          tags={previewTags}
+          onClose={() => setPreviewTags(null)}
+          onConfirm={() => {
+            const count = previewTags.length
+            setPreviewTags(null)
+            setToast({ open: true, severity: 'info', message: `${count}件 印刷実行中` })
+          }}
+        />
+      )}
 
       <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
         <Alert severity={toast.severity} onClose={() => setToast(p => ({ ...p, open: false }))} sx={{ width: '100%' }}>
@@ -862,10 +1376,10 @@ function HistoryModeContent({ onBack }: { onBack: () => void }) {
 
 // ─── Page root ────────────────────────────────────────────────────────────────
 
-function GrossInventoryPage() {
-  const router = useRouter()
+function GrossInventoryContent({ onExit }: { onExit: () => void }) {
   const [mode, setMode] = useState<PageMode>('modal')
   const [config, setConfig] = useState<ModalConfig | null>(null)
+  const [modeSwitchOpen, setModeSwitchOpen] = useState(false)
 
   const handleConfirm = (cfg: ModalConfig) => {
     setConfig(cfg)
@@ -875,16 +1389,40 @@ function GrossInventoryPage() {
     else setMode('each')
   }
 
-  const handleCancel = () => router.history.back()
+  const handleSwitchMode = (method: InputMethod) => {
+    setConfig(prev => prev ? { ...prev, inputMethod: method } : null)
+    setMode(method)
+    setModeSwitchOpen(false)
+  }
+
   const handleBackToModal = () => setMode('modal')
 
   return (
     <Box sx={{ height: '100%' }}>
-      <ConfigModal open={mode === 'modal'} onConfirm={handleConfirm} onCancel={handleCancel} />
-      {mode === 'each' && config && <EachModeContent config={config} onBack={handleBackToModal} />}
-      {mode === 'batch' && config && <BatchModeContent config={config} onBack={handleBackToModal} />}
-      {mode === 'set' && config && <SetModeContent config={config} onBack={handleBackToModal} />}
+      <ConfigModal open={mode === 'modal'} onConfirm={handleConfirm} onCancel={onExit} />
+      {mode === 'each' && config && (
+        <EachModeContent config={config} onBack={handleBackToModal} onSwitchMode={() => setModeSwitchOpen(true)} />
+      )}
+      {mode === 'batch' && config && (
+        <BatchModeContent config={config} onBack={handleBackToModal} onSwitchMode={() => setModeSwitchOpen(true)} />
+      )}
+      {mode === 'set' && config && (
+        <SetModeContent config={config} onBack={handleBackToModal} onSwitchMode={() => setModeSwitchOpen(true)} />
+      )}
       {mode === 'history' && <HistoryModeContent onBack={handleBackToModal} />}
+      {modeSwitchOpen && config && config.functionType !== 'history' && (
+        <ModeSwitchModal
+          open={modeSwitchOpen}
+          current={config.inputMethod}
+          onConfirm={handleSwitchMode}
+          onClose={() => setModeSwitchOpen(false)}
+        />
+      )}
     </Box>
   )
+}
+
+function GrossInventoryPage() {
+  const router = useRouter()
+  return <GrossInventoryContent onExit={() => router.history.back()} />
 }

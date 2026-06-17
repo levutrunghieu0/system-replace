@@ -20,7 +20,7 @@ import type { Partner } from '../types'
 
 interface PartnerSelectionModalProps {
   open: boolean
-  onConfirm: (mode: 'csv' | 'reference', partner: Partner) => void
+  onConfirm: (mode: 'csv' | 'reference', partner: Partner | null) => void
   onCancel: () => void
 }
 
@@ -75,8 +75,10 @@ export function PartnerSelectionModal({ open, onConfirm, onCancel }: PartnerSele
   }, [partnerCode, t])
 
   const handleExecute = () => {
-    if (partner) {
-      onConfirm(mode, partner)
+    if (mode === 'reference') {
+      onConfirm('reference', null)
+    } else if (partner) {
+      onConfirm('csv', partner)
     }
   }
 
@@ -115,46 +117,48 @@ export function PartnerSelectionModal({ open, onConfirm, onCancel }: PartnerSele
           </RadioGroup>
         </Box>
 
-        {/* Partner code input */}
-        <Box sx={{ ...rowSx, borderBottom: 'none', pb: 3 }}>
-          <FormLabel sx={labelSx}>{t('page.warehouse.csvPurchase.partnerSelection.partnerCode')}</FormLabel>
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <TextField
-                size="small"
-                placeholder={t('page.warehouse.csvPurchase.partnerSelection.partnerCodePlaceholder')}
-                value={partnerCode}
-                onChange={(e) => setPartnerCode(e.target.value)}
-                slotProps={{
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon fontSize="small" />
-                      </InputAdornment>
-                    ),
-                  },
-                }}
-                sx={{ width: 160 }}
-              />
-              {loading && <Typography variant="caption" color="text.secondary">{t('page.warehouse.csvPurchase.partnerSelection.loading')}</Typography>}
-              {partner && (
-                <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
-                  {partner.name}
-                </Typography>
-              )}
-            </Box>
+        {/* Partner code input — only for 仕入処理 mode */}
+        {mode === 'csv' && (
+          <Box sx={{ ...rowSx, borderBottom: 'none', pb: 3 }}>
+            <FormLabel sx={labelSx}>{t('page.warehouse.csvPurchase.partnerSelection.partnerCode')}</FormLabel>
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <TextField
+                  size="small"
+                  placeholder={t('page.warehouse.csvPurchase.partnerSelection.partnerCodePlaceholder')}
+                  value={partnerCode}
+                  onChange={(e) => setPartnerCode(e.target.value)}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon fontSize="small" />
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  sx={{ width: 160 }}
+                />
+                {loading && <Typography variant="caption" color="text.secondary">{t('page.warehouse.csvPurchase.partnerSelection.loading')}</Typography>}
+                {partner && (
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                    {partner.name}
+                  </Typography>
+                )}
+              </Box>
 
-            {error && (
-              <Alert severity="warning" variant="outlined" sx={{ py: 0, px: 1, mt: 0.5, '& .MuiAlert-message': { fontSize: '0.78rem', py: 0.5 } }}>
-                {error}
-              </Alert>
-            )}
-            
-            <Typography variant="caption" color="text.secondary">
-              {t('page.warehouse.csvPurchase.partnerSelection.demo')}
-            </Typography>
+              {error && (
+                <Alert severity="warning" variant="outlined" sx={{ py: 0, px: 1, mt: 0.5, '& .MuiAlert-message': { fontSize: '0.78rem', py: 0.5 } }}>
+                  {error}
+                </Alert>
+              )}
+
+              <Typography variant="caption" color="text.secondary">
+                {t('page.warehouse.csvPurchase.partnerSelection.demo')}
+              </Typography>
+            </Box>
           </Box>
-        </Box>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2, gap: 1.5, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'grey.50' }}>
@@ -164,7 +168,7 @@ export function PartnerSelectionModal({ open, onConfirm, onCancel }: PartnerSele
         <Button
           variant="contained"
           onClick={handleExecute}
-          disabled={!partner}
+          disabled={mode === 'csv' && !partner}
           sx={{ textTransform: 'none', minWidth: 100, fontWeight: 700 }}
         >
           {t('action.run')}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
@@ -7,24 +8,34 @@ import Avatar from "@mui/material/Avatar";
 import Badge from "@mui/material/Badge";
 import Tooltip from "@mui/material/Tooltip";
 import Divider from "@mui/material/Divider";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import Switch from "@mui/material/Switch";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import ArrowBackIosNewIcon from "@mui/icons-material/ArrowBackIosNew";
 import SearchIcon from "@mui/icons-material/Search";
 import ViewWeekIcon from "@mui/icons-material/ViewWeek";
 import PersonOutlineIcon from "@mui/icons-material/Person2Outlined";
+import SettingsIcon from "@mui/icons-material/Settings";
 import { useTranslation } from "react-i18next";
 import { useRouter } from "@tanstack/react-router";
 import { useLayoutContext } from "../../contexts/LayoutContext";
+import { useAppSettings } from "../../contexts/AppSettingsContext";
 
 const HEADER_HEIGHT = 56;
 
 interface AppHeaderProps {
-  showSecondaryNav: boolean;
+  showSecondaryNav?: boolean;
 }
 
 export default function AppHeader({ showSecondaryNav }: AppHeaderProps) {
   const { t } = useTranslation();
   const { screenTitle, showBackButton, onBack } = useLayoutContext();
+  const { employeeAuthEnabled, setEmployeeAuthEnabled } = useAppSettings();
   const router = useRouter();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   const handleBack = () => (onBack ? onBack() : router.history.back());
   console.log("AppHeader rendered with showSecondaryNav:", showSecondaryNav); // Debug log;
 
@@ -114,6 +125,17 @@ export default function AppHeader({ showSecondaryNav }: AppHeaderProps) {
         }}
       />
 
+      {/* Settings icon */}
+      <Tooltip title="設定" arrow>
+        <IconButton
+          size="small"
+          onClick={() => setSettingsOpen(true)}
+          sx={{ color: "text.secondary", "&:hover": { color: "text.primary" } }}
+        >
+          <SettingsIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+
       <Divider orientation="vertical" flexItem sx={{ mx: 0.5, my: 1 }} />
 
       {/* Staff login / scan area */}
@@ -166,6 +188,40 @@ export default function AppHeader({ showSecondaryNav }: AppHeaderProps) {
           </Typography>
         </Box>
       </Tooltip>
+
+      {/* Settings dialog */}
+      <Dialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: "0.95rem", fontWeight: 700, pb: 1 }}>
+          設定
+        </DialogTitle>
+        <DialogContent dividers>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={employeeAuthEnabled}
+                onChange={(_, v) => setEmployeeAuthEnabled(v)}
+                color="primary"
+              />
+            }
+            label={
+              <Box>
+                <Typography sx={{ fontSize: "0.875rem", fontWeight: 600 }}>
+                  従業員認証
+                </Typography>
+                <Typography sx={{ fontSize: "0.78rem", color: "text.secondary" }}>
+                  メニュー選択時に従業員コードの入力を要求する
+                </Typography>
+              </Box>
+            }
+            sx={{ alignItems: "flex-start", gap: 1, mx: 0 }}
+          />
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 }

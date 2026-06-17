@@ -1,5 +1,6 @@
 import type { Components, Theme } from '@mui/material/styles'
 
+// PDF spec: ボタン高さ 36px / タップ許容範囲 48px 以上
 export const MuiButton: Components<Theme>['MuiButton'] = {
   defaultProps: {
     disableElevation: true,
@@ -7,16 +8,25 @@ export const MuiButton: Components<Theme>['MuiButton'] = {
   styleOverrides: {
     root: {
       borderRadius: 8,
-      fontWeight: 600,
+      fontWeight: 700,
+      fontSize: '0.875rem',
       textTransform: 'none',
-      padding: '8px 20px',
+      height: 36,
+      minHeight: 36,
+      padding: '0 20px',
+      // タップ許容範囲 48px: タッチデバイスで hit area を拡大
+      '@media (pointer: coarse)': {
+        minHeight: 48,
+      },
     },
     sizeSmall: {
-      padding: '4px 12px',
+      height: 32,
+      padding: '0 12px',
       fontSize: '0.8125rem',
     },
     sizeLarge: {
-      padding: '12px 28px',
+      height: 48,
+      padding: '0 28px',
       fontSize: '1rem',
     },
   },

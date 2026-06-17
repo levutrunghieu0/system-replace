@@ -5,6 +5,8 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -14,7 +16,8 @@ import { useTranslation } from "react-i18next";
 interface InvoiceVerificationModalProps {
   open: boolean;
   totalAmount: number;
-  onConfirm: (slipAmount: number) => void;
+  slipNumber: string;
+  onConfirm: (slipAmount: number, labelIssue: boolean) => void;
   onCancel: () => void;
   submitting?: boolean;
 }
@@ -22,6 +25,7 @@ interface InvoiceVerificationModalProps {
 export function InvoiceVerificationModal({
   open,
   totalAmount,
+  slipNumber,
   onConfirm,
   onCancel,
   submitting = false,
@@ -29,16 +33,17 @@ export function InvoiceVerificationModal({
   const { t } = useTranslation();
   const [slipAmountStr, setSlipAmountStr] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [labelIssue, setLabelIssue] = useState(false);
 
   useEffect(() => {
     if (open) {
       setSlipAmountStr("");
       setError(null);
+      setLabelIssue(false);
     }
   }, [open]);
 
-  // Auto-generate slip details
-  const generatedSlipNo = "SL-987654";
+  // 伝票日付 is auto-derived; 伝票番号 comes from the current flow (自動採番)
   const currentDate = new Date().toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "2-digit",
@@ -51,15 +56,13 @@ export function InvoiceVerificationModal({
       setError(t("page.warehouse.csvPurchase.invoice.error.notANumber"));
       return;
     }
-    console.log('totalAmount', totalAmount)
-
     if (entered !== totalAmount) {
       setError(t("page.warehouse.csvPurchase.invoice.error.amountMismatch"));
       return;
     }
 
     setError(null);
-    onConfirm(entered);
+    onConfirm(entered, labelIssue);
   };
 
   const rowSx = {
@@ -114,7 +117,7 @@ export function InvoiceVerificationModal({
             {t("page.warehouse.csvPurchase.invoice.slipNumber")}
           </Typography>
           <Typography sx={{ fontSize: "0.875rem", fontWeight: 600 }}>
-            {generatedSlipNo}
+            {slipNumber}
           </Typography>
         </Box>
 
@@ -127,7 +130,7 @@ export function InvoiceVerificationModal({
           </Typography>
         </Box>
 
-        <Box sx={{ ...rowSx, borderBottom: "none", pb: 3 }}>
+        <Box sx={rowSx}>
           <Typography sx={labelSx}>
             {t("page.warehouse.csvPurchase.invoice.slipAmount")}
           </Typography>
@@ -163,6 +166,32 @@ export function InvoiceVerificationModal({
               })}
             </Typography>
           </Box>
+        </Box>
+
+        <Box sx={{ ...rowSx, borderBottom: "none", pb: 2 }}>
+          <Typography sx={labelSx}>{t("page.warehouse.csvPurchase.invoice.labelIssueTitle")}</Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={labelIssue}
+                onChange={(e) => setLabelIssue(e.target.checked)}
+              />
+            }
+            label={
+              <Typography
+                sx={{
+                  fontSize: "0.875rem",
+                  color: labelIssue ? "primary.main" : "text.secondary",
+                  fontWeight: labelIssue ? 600 : 400,
+                }}
+              >
+                {labelIssue
+                  ? t("page.warehouse.csvPurchase.invoice.labelIssueOn")
+                  : t("page.warehouse.csvPurchase.invoice.labelIssueOff")}
+              </Typography>
+            }
+          />
         </Box>
       </DialogContent>
 

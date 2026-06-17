@@ -14,6 +14,13 @@ export const components: Components<Theme> = {
   MuiTableCell,
   MuiTableRow,
   MuiTablePagination,
+  MuiTypography: {
+    defaultProps: {
+      variantMapping: {
+        bodyLarge: 'p',
+      },
+    },
+  },
   MuiCssBaseline: {
     styleOverrides: {
       html: {

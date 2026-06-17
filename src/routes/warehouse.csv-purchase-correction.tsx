@@ -23,6 +23,8 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { ja } from 'date-fns/locale'
+import FirstPageIcon from '@mui/icons-material/FirstPage'
+import LastPageIcon from '@mui/icons-material/LastPage'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
@@ -78,6 +80,16 @@ function CsvPurchaseCorrectionPage() {
     if (flowState !== 'workspace') return []
     return [
       {
+        key: 'first',
+        labelKey: 'action.first',
+        position: 'left' as const,
+        variant: 'outlined' as const,
+        color: 'inherit' as const,
+        disabled: slipIndex === 0,
+        startIcon: <FirstPageIcon fontSize="small" />,
+        onClick: () => setSlipIndex(0),
+      },
+      {
         key: 'prev',
         labelKey: 'action.prev',
         position: 'left' as const,
@@ -96,6 +108,16 @@ function CsvPurchaseCorrectionPage() {
         disabled: slipIndex === slips.length - 1,
         startIcon: <NavigateNextIcon fontSize="small" />,
         onClick: () => setSlipIndex((i) => Math.min(slips.length - 1, i + 1)),
+      },
+      {
+        key: 'last',
+        labelKey: 'action.last',
+        position: 'left' as const,
+        variant: 'outlined' as const,
+        color: 'inherit' as const,
+        disabled: slipIndex === slips.length - 1,
+        startIcon: <LastPageIcon fontSize="small" />,
+        onClick: () => setSlipIndex(slips.length - 1),
       },
       {
         key: 'execute',
@@ -125,7 +147,11 @@ function CsvPurchaseCorrectionPage() {
     try {
       const dateStr = correctionDate.toISOString().split('T')[0]
       const fetchedSlips = await csvPurchaseApi.getLegacySlips(dateStr)
-      setSlips(fetchedSlips)
+      // Store Manual STEP 13: 伝票No.が最新の伝票を表示 — newest slip number first
+      const sortedSlips = [...fetchedSlips].sort((a, b) =>
+        b.slipNumber.localeCompare(a.slipNumber, undefined, { numeric: true }),
+      )
+      setSlips(sortedSlips)
       setSlipIndex(0)
       setFlowState('workspace')
     } finally {
@@ -147,6 +173,7 @@ function CsvPurchaseCorrectionPage() {
             to: '/warehouse/csv-purchase',
             search: {
               skipToFile: true,
+              correction: true,
               partnerCode: currentSlip.partnerCode,
               partnerName: currentSlip.partnerName,
             },

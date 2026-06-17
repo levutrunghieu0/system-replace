@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import type { SxProps, Theme } from '@mui/material/styles'
 import {
   flexRender,
   getCoreRowModel,
@@ -57,8 +58,10 @@ export function AppTable<TData>({
   onColumnVisibilityChange,
   getRowId,
   onRowClick,
+  getRowSx,
   toolbarLeft,
   toolbarRight,
+  topInputRow,
   dense = false,
   stickyHeader = false,
   containerMaxHeight = 600,
@@ -218,7 +221,10 @@ export function AppTable<TData>({
                       key={header.id}
                       colSpan={header.colSpan}
                       style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
-                      sx={header.column.columnDef.meta?.headerSx}
+                      sx={{
+                        ...(stickyHeader && { backgroundColor: 'background.paper', zIndex: 4 }),
+                        ...header.column.columnDef.meta?.headerSx,
+                      }}
                     >
                       {header.isPlaceholder ? null : canSort ? (
                         <TableSortLabel
@@ -239,6 +245,13 @@ export function AppTable<TData>({
           </TableHead>
 
           <TableBody>
+            {topInputRow && (
+              <TableRow>
+                <TableCell colSpan={columnCount} sx={{ py: 0.75, px: 1.5, border: 'none' }}>
+                  {topInputRow}
+                </TableCell>
+              </TableRow>
+            )}
             {loading && <AppTableLoading columnCount={columnCount} />}
             {error && <AppTableError columnCount={columnCount} message={errorMessage} />}
             {showEmpty && <AppTableEmpty columnCount={columnCount} message={emptyMessage} />}
@@ -250,7 +263,10 @@ export function AppTable<TData>({
                   hover={Boolean(onRowClick)}
                   selected={row.getIsSelected()}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                  sx={onRowClick ? { cursor: 'pointer' } : undefined}
+                  sx={[
+                    onRowClick ? { cursor: 'pointer' } : {},
+                    ...(getRowSx ? [getRowSx(row.original)] : []),
+                  ] as SxProps<Theme>}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} sx={cell.column.columnDef.meta?.cellSx}>

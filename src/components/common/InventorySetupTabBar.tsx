@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Paper from '@mui/material/Paper'
@@ -15,12 +16,13 @@ const TABS = [
   { key: 'handy'          as SetupTab, path: '/inventory/handy',               Icon: PhonelinkSetupIcon, labelKey: 'page.tanazaoroshi.handy.title'             },
 ]
 
-export function InventorySetupTabBar({ activeTab }: { activeTab: SetupTab }) {
+export function InventorySetupTabBar({ activeTab, filterSlot }: { activeTab: SetupTab; filterSlot?: ReactNode }) {
   const navigate = useNavigate()
   const { t } = useTranslation()
 
   return (
     <Paper elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+      {/* Tab row */}
       <Box sx={{ display: 'flex' }}>
         {TABS.map((tab, i) => {
           const isActive = tab.key === activeTab
@@ -49,6 +51,13 @@ export function InventorySetupTabBar({ activeTab }: { activeTab: SetupTab }) {
           )
         })}
       </Box>
+
+      {/* Filter bar row (second row) */}
+      {filterSlot && (
+        <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+          {filterSlot}
+        </Box>
+      )}
     </Paper>
   )
 }

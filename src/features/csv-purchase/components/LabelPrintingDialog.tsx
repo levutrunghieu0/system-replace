@@ -17,19 +17,20 @@ import { useTranslation } from 'react-i18next'
 interface LabelPrintingDialogProps {
   open: boolean
   onClose: (printed: boolean, config?: string) => void
+  skipPrompt?: boolean
 }
 
-export function LabelPrintingDialog({ open, onClose }: LabelPrintingDialogProps) {
+export function LabelPrintingDialog({ open, onClose, skipPrompt = false }: LabelPrintingDialogProps) {
   const { t } = useTranslation()
   const [step, setStep] = useState<'prompt' | 'config' | 'printing'>('prompt')
-  const [labelType, setLabelType] = useState('自動')
+  const [labelType, setLabelType] = useState('')
 
   useEffect(() => {
     if (open) {
-      setStep('prompt')
-      setLabelType('自動')
+      setStep(skipPrompt ? 'config' : 'prompt')
+      setLabelType(t('page.warehouse.csvPurchase.labelPrinting.config.auto'))
     }
-  }, [open])
+  }, [open, skipPrompt, t])
 
   const handlePromptYes = () => {
     setStep('config')

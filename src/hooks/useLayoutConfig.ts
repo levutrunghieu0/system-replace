@@ -61,7 +61,15 @@ export function useLayoutConfig({
   actionsRef.current = actions
 
   useEffect(() => {
-    if (actionsRef.current !== undefined) setActions(actionsRef.current)
+    if (actionsRef.current !== undefined) {
+      // Wrap onClick in stable delegates so stale-closure is never an issue:
+      // even if this effect doesn't re-run (actionsKey unchanged), clicking a
+      // button always calls the *current* handler via the ref.
+      setActions(actionsRef.current.map((a, i) => ({
+        ...a,
+        onClick: () => actionsRef.current![i].onClick(),
+      })))
+    }
     return () => setActions([])
   }, [actionsKey, setActions]) // eslint-disable-line react-hooks/exhaustive-deps
 }
